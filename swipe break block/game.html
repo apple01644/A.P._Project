@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<style>
+		body {
+			background-color: #383838;
+		}
+		h1 {
+			color : white;
+		}
+		a {
+			color : white;
+		}
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+		canvas {
+			border:1px solid #616161;
+			background-color: #FFFFFF;
+		}
+		</style>
+	</head>
+
+	<body onload="startGame()" id="body">
+		<h1>스와이프 벽돌깨기</h1>
+	</body>
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+	<script>
+
+	window.addEventListener("load", function(){
+	});
+
+	document.addEventListener('contextmenu', event => event.preventDefault());
+
+	var data = {};
+	var canvas = null;
+  var max_color = {r : 255, g : 0, b : 0};
+  var ball_color = {r : 154, g : 205, b : 50};
+  var min_color = {r : 252, g : 222, b : 146};
+  const org_max_color = {r : 255, g : 0, b : 0};
+  const org_ball_color = {r : 154, g : 205, b : 50};
+  const org_min_color = {r : 252, g : 222, b : 146};
+  
+  class Block {
+    constructor(hp, type) {
+      this.health = hp;
+      this.type = type;
+      this.hit = 0;
+      this.last_hit = 1;
+    }
+  }
+  
+  class Ball {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      
+      this.dx = 0;
+      this.dy = 0;
+      this.id = Math.random();
+    }
+  }
+    
+  class Effect {
+    constructor(x, y, w, color, type) {
+      this.x = x;
+      this.y = y;
+      this.w = w;
+      this.color = color;
+      
+      this.g = 0;
+      this.dx = (Math.random() - 0.5) * 1.2;
+      this.dy = (Math.random() - 0.5) * 1.2;
+      
+      this.type = type;
+    }
+  }
+    
+  //============================================================================
+  //각종 게임 시작 값들
+  const mapsize = {w : 7, h : 16};   //w : 가로, h : 세로
+  const auto_play = true;
+  
+  //============================================================================
+  //자동화 함수
+    
+  function auto_shoot() {
+    
+    let rad = -Math.PI + 0.15 + Math.random() * (Math.PI - 0.15 * 2);
+    
+    let vec = {x : Math.cos(rad), y : Math.sin(rad)};
+    
+    shoot(vec, data.bullets);
+  }
+    
+  //============================================================================
+	function componentToHex(c) {
+    var hex = c.toString(16);
+    return hex.length == 1 ? "0" + hex : hex;
+  }
+    
+  function collision_between_rect_circle(rect, circle){
+    let rectA = {
+      x1 : rect.x,
+      x2 : rect.x + rect.w,
+      y1 : rect.y,
+      y2 : rect.y + rect.h
+    };
+    let rectB = {
+      x1 : circle.x - circle.r,
+      x2 : circle.x + circle.r,
+      y1 : circle.y - circle.r,
+      y2 : circle.y + circle.r
+    };
+    
+    if (rectA.x1 < rectB.x2 && rectA.x2 > rectB.x1 &&
+  rectA.y1 < rectB.y2 && rectA.y2 > rectB.y1) {
+      
+      if ((circle.y > rect.y + rect.h || circle.y < rect.y) && (circle.x > rect.x + rect.w || circle.x < rect.x))
+      {
+        let near = {}
+        if (circle.x > rect.x + rect.w / 2)
+        {
+          near.x = rect.x + rect.w;
+        }
+        else
+        {
+          near.x = rect.x;
+        }
+
+        if (circle.y > rect.y + rect.h / 2)
+        {
+          near.y = rect.y + rect.h;
+        }
+        else
+        {
+          near.y = rect.y;
+        }
+        let vec = {x : near.x - circle.x, y : near.y - circle.y};//Circle to point;
+        
+        return Math.sqrt(Math.pow(vec.x, 2) + Math.pow(vec.y, 2)) <= circle.r;
+      }
+      else
+      {
+        return true;
+      }
+    }
+    return false;
+  
+  }
+
+    
+  function reset() {
+    data.map = []
+    for (let x = 0; x < mapsize.w; ++x)
+    {
+      data.map.push([])
+      for (let y = 0; y < mapsize.h; ++y)
+      {
+        data.map[x].push(null);
+      }
+    }
+    data.score = 1;
+    data.start_x = canvas.width / 2;
+    data.ball = [];
+    data.effect = [];
+    data.bullets = 1;
+    data.lock = false;
+    data.map_delta = {y : 0};
+    data.tick = 0;
+    data.lose = false;
+    data.buf_bullets = 0;
+    
+    max_color = org_max_color;
+    min_color = org_min_color;
+    ball_color = org_ball_color;
+    
+    go_down();
+  }
+    
+  function clear_green_ball()
+  {
+    data.lock = true;
+    
+    let repeat = setInterval(
+    function ()
+    {
+      let work = false;
+      
+      if (data.effect.length != 0)
+      {
+        let temp = data.effect;
+        data.effect = []
+        for (let i = 0; i < temp.length; ++i)
+        {
+          if (temp[i].type == "green_ball") 
+          { 
+            if (Math.abs(temp[i].x - data.start_x) > 10)
+            {
+              work = true;
+              if (temp[i].x > data.start_x) 
+              {
+                temp[i].x -= 4;
+              }
+              else
+              {
+                temp[i].x += 4;
+              }
+              data.effect.push(temp[i]); 
+            }
+          }  
+          else
+          {
+            data.effect.push(temp[i]); 
+          }
+        }
+      }      
+      
+      if (!work)
+      {
+        data.lock = false;
+        clearInterval(repeat);
+      }
+    }
+    , 3);
+    
+    
+  }
+    
+  function go_down() {
+    data.lock = true;
+    
+    //data.map[Math.floor(mapsize.w * Math.random())][1] = new Block(data.score, "block");    
+    for (let x = 0; x < mapsize.w; ++x)
+    {
+      for (let y = mapsize.h - 1; y > 1; --y)
+      {
+        data.map[x][y] = data.map[x][y - 1];
+        data.map[x][y - 1] = null;
+      }
+      if (Math.random() > 0.5)
+      {
+        data.map[x][1] = new Block(data.score, "block");
+      }
+    }
+    
+    
+    
+    data.map[Math.floor(mapsize.w * Math.random())][1] = null;
+    let ind;
+    do {
+      ind = Math.floor(mapsize.w * Math.random());
+    }while(data.map[ind][1] == null);
+    
+    data.map[ind][1] = new Block(data.score, "ball");
+    ++data.score;
+    
+    const block_h = canvas.height / mapsize.h;
+    
+    data.map_delta.y = -block_h;
+        
+    let repeat = setInterval(
+      function () {
+        data.map_delta.y += Math.pow(data.map_delta.y + block_h, 2) * 0.001 + 0.3;//
+        if (data.map_delta.y >= 0)
+        {
+          data.map_delta.y = 0;
+          data.lock = false;
+          clearInterval(repeat);
+        }
+      }
+      ,3
+    );
+    
+  }  
+    
+  function check_lose() {
+    data.lock = true;
+    for (let x = 0; x < mapsize.w; ++x)
+    {
+      if (data.map[x][mapsize.h - 1] != null)
+      {
+        if (data.map[x][mapsize.h - 1].type == "block")
+        {
+          data.lock = true;
+          data.lose = true;
+          
+          lose_game();
+          break;
+        }
+        else if (data.map[x][mapsize.h - 1].type == "ball")
+        {
+          ++data.bullets;
+          data.map[x][mapsize.h - 1] = null;
+        }
+      }
+    }
+    data.lock = false;
+  }
+    
+  function lose_game() 
+  {
+    data.ball = [];
+    let i = 0;
+    
+    let start = false;
+    
+    let repeat_for_lock = setInterval(
+    function () {
+      if (data.lock == false)
+      {
+        data.lock = true;
+        start = true;
+        clearInterval(repeat_for_lock);
+      }
+    }
+      , 200
+    );
+    
+    let repeat = setInterval(
+    function () {
+      if (!start) return;
+      i += 5;
+      
+      let avr_min = (org_min_color.r + org_min_color.g + org_min_color.b) / 3.0;
+      let avr_max = (org_max_color.r + org_max_color.g + org_max_color.b) / 3.0;
+      let avr_ball = (org_ball_color.r + org_ball_color.g + org_ball_color.b) / 3.0;
+      
+      min_color = {
+        r : Math.round((avr_min * (i) + org_min_color.r * (255 - i)) / 255.0),
+        g : Math.round((avr_min * (i) + org_min_color.g * (255 - i)) / 255.0),
+        b : Math.round((avr_min * (i) + org_min_color.b * (255 - i)) / 255.0)
+      };
+      
+      max_color = {
+        r : Math.round((avr_max * (i) + org_max_color.r * (255 - i)) / 255.0),
+        g : Math.round((avr_max * (i) + org_max_color.g * (255 - i)) / 255.0),
+        b : Math.round((avr_max * (i) + org_max_color.b * (255 - i)) / 255.0)
+      };
+      
+      ball_color = {
+        r : Math.round((avr_ball * (i) + org_ball_color.r * (255 - i)) / 255.0),
+        g : Math.round((avr_ball * (i) + org_ball_color.g * (255 - i)) / 255.0),
+        b : Math.round((avr_ball * (i) + org_ball_color.b * (255 - i)) / 255.0)
+      };
+      
+      if (i >= 255)
+      {
+        clearInterval(repeat);
+        setTimeout(
+        function () {
+          reset();
+          data.lock = false;
+        }, 3000);
+      }
+    }
+    , 1);
+  }
+    
+	function startGame() {
+		canvas = document.createElement("canvas");
+		let body = document.getElementById("body");
+		body.appendChild(canvas);
+
+		canvas.width = 710;//480
+		canvas.height = 1172;
+
+		document.onkeydown = handleKeydown;
+		canvas.onclick = handleMouseLeftdown;
+		canvas.oncontextmenu = handleMouseRightdown;
+    
+    reset();
+
+		setInterval(stepGame, 5, canvas);
+    
+	}
+    
+  function shoot(vec, n) 
+  {
+    const block_h = canvas.height / mapsize.h;
+    
+    if (n == 0) return;
+    let ball = new Ball(data.start_x, canvas.height - block_h / 6);
+    ball.dx = vec.x * 3.45;
+    ball.dy = vec.y * 3.45;
+    data.ball.push(ball)
+    setTimeout(
+      function()  {shoot(vec, n - 1); }
+       , 320 / 2.45);
+  }
+
+	function stepGame(canvas) {
+    data.tick = (data.tick + 1) % 65536;
+		let ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = "48px Arial";
+    ctx.textAlign = "center"; 
+		ctx.textBaseline = "middle";
+    
+    const block_w = canvas.width / mapsize.w;
+    const block_h = canvas.height / mapsize.h;
+    
+    let circle_margin = block_h / 72 + Math.pow(3 - (data.tick / 25 % 6), 2) * 0.35;
+    
+    ctx.fillStyle = "black";
+    ctx.fillText("현재 점수:" + (data.score - 1), canvas.width / 2, 30); 
+    ctx.font = "36px Arial";
+    
+    for (let i = 0; i < data.effect.length; ++i)
+    {
+      let effect = data.effect[i];
+      
+      switch (effect.type)
+      {
+        case "rect":
+          effect.g += 0.03;
+          effect.w -= 0.02;
+          effect.x += effect.dx;
+          effect.y += effect.dy + effect.g;
+
+          ctx.fillStyle = "#" + componentToHex(effect.color.r) + componentToHex(effect.color.g) +componentToHex(effect.color.b);
+          ctx.beginPath();
+          ctx.rect(effect.x - effect.w / 2, effect.y - effect.w / 2, effect.w, effect.w);
+          ctx.fill();
+          break;
+        case "green_ball":
+          
+          ctx.fillStyle = "#" + componentToHex(ball_color.r) + componentToHex(ball_color.g) +componentToHex(ball_color.b);
+          
+          if (effect.y < canvas.height - block_h / 6)
+          {
+            effect.y += 5.5;
+          }
+          else
+          {
+            effect.y = canvas.height - block_h / 6;
+          }
+          
+          ctx.beginPath();
+          ctx.ellipse(effect.x, effect.y, effect.w, effect.w, 0, 0, Math.PI * 2);
+          ctx.fill();
+          
+          break;
+        case "blue_ball":
+          ctx.fillStyle = "skyblue";
+          
+          
+          if (Math.abs(effect.x - data.start_x) > 10)
+          {
+            if (effect.x > data.start_x) 
+            {
+              effect.x -= 4;
+            }
+            else
+            {
+              effect.x += 4;
+            }
+          }
+          else
+          {
+            effect.w = 0;
+          }
+          
+          ctx.beginPath();
+          ctx.ellipse(effect.x, effect.y, effect.w, effect.w, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+          
+      }
+      
+    }
+    
+    for (let x = 0; x < mapsize.w; ++x)
+    {
+      for (let y = 0; y < mapsize.h; ++y)
+      {
+        if (data.map[x][y] != null)
+        {
+          if (data.map[x][y].type == "block")
+          {
+            let a = (data.map[x][y].health * 1.0) / data.score;
+            let color = 
+            {r : Math.round(max_color.r * a + min_color.r * (1 - a)),
+             g : Math.round(max_color.g * a + min_color.g * (1 - a)),
+             b : Math.round(max_color.b * a + min_color.b * (1 - a))};
+            
+            if (data.map[x][y].hit > 0)
+            {
+              color = {
+                r : Math.round(color.r * (1 - data.map[x][y].hit) + (255) * data.map[x][y].hit),
+                g : Math.round(color.g * (1 - data.map[x][y].hit) + (255) * data.map[x][y].hit),
+                b : Math.round(color.b * (1 - data.map[x][y].hit) + (255) * data.map[x][y].hit) 
+              };
+              data.map[x][y].hit -= 0.02;
+            }
+            else
+            {
+              data.map[x][y].hit = 0;
+            }
+            
+            ctx.fillStyle = "#" + componentToHex(color.r) + componentToHex(color.g) + componentToHex(color.b);
+            
+            ctx.beginPath();
+            ctx.rect(x * block_w + 1, y * block_h + 1  + data.map_delta.y, block_w - 2, block_h - 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.fillText(data.map[x][y].health, x * block_w + block_w / 2, y * block_h + block_h / 2 + data.map_delta.y); 
+          }
+          else if (data.map[x][y].type == "ball")
+          {
+            ctx.fillStyle = "#" + componentToHex(ball_color.r) + componentToHex(ball_color.g) + componentToHex(ball_color.b);
+            ctx.beginPath();
+            ctx.ellipse(x * block_w + block_w / 2, y * block_h + block_h / 2 + data.map_delta.y, block_h / 4.5 + circle_margin, block_h / 4.5 + circle_margin, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.ellipse(x * block_w + block_w / 2, y * block_h + block_h / 2 + data.map_delta.y, block_h / 6 + circle_margin, block_h / 6 + circle_margin, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#" + componentToHex(ball_color.r) + componentToHex(ball_color.g) + componentToHex(ball_color.b);
+            ctx.beginPath();
+            ctx.ellipse(x * block_w + block_w / 2, y * block_h + block_h / 2 + data.map_delta.y, block_h / 6, block_h / 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          else
+          {
+            ctx.fillStyle = 'purple';
+            ctx.beginPath();
+            ctx.ellipse(x * block_w + block_w / 2, y * block_h + block_h / 2, block_h / 4, block_h / 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          	
+        }
+      }
+    }
+        
+    ctx.fillStyle = 'skyblue';
+    for (let i = 0; i < data.ball.length; ++i)
+    {
+      let ball = data.ball[i];
+      ball.x += ball.dx;
+      ball.y += ball.dy;
+      
+      if (ball.x > canvas.width - block_h / 6)
+      {
+        ball.x = canvas.width - block_h / 6;
+        ball.dx = -Math.abs(ball.dx);
+      }
+      if (ball.x < block_h / 6)
+      {
+        ball.x = block_h / 6;
+        ball.dx = Math.abs(ball.dx);
+      }
+      if (ball.y < block_h / 6)
+      {
+        ball.y = block_h / 6;
+        ball.dy = Math.abs(ball.dy);
+      }
+      
+      for (let x = 0; x < mapsize.w; ++x)
+      {
+        for (let y = 0; y < mapsize.h; ++y)
+        {
+          if (data.map[x][y] != null)
+          {
+            if (data.map[x][y].type == "block")
+            {
+               if ((data.map[x][y].last_hit != ball.id || data.map[x][y].hit == 0) && collision_between_rect_circle({x : (x * block_w + 1), y : (y * block_h + 1), w : (block_w - 2), h : (block_h - 2)}, {x : ball.x, y : ball.y, r : block_h / 6}))
+              {
+                
+                if ((ball.y > (y * block_h + 1) + (block_h - 2) || ball.y < (y * block_h + 1)) && (ball.x > (x * block_w + 1) + (block_w - 2) || ball.x < (x * block_w + 1)))
+                {
+                  let near = {};
+                  let point = {x : 0, y : 0};
+                  if (ball.x > (x * block_w + 1) + (block_w - 2) / 2)
+                  {
+                    near.x = (x * block_w + 1) + (block_w - 2);
+                    point.x = 1;
+                  }
+                  else
+                  {
+                    near.x = (x * block_w + 1);
+                    point.x = -1;
+                  }
+
+                  if (ball.y > (y * block_h + 1) + (block_h - 2) / 2)
+                  {
+                    near.y = (y * block_h + 1) + (block_h - 2);
+                    point.y = 1;
+                  }
+                  else
+                  {
+                    near.y = (y * block_h + 1);
+                    point.y = -1;
+                  }
+                  
+                  let pass = {}
+                  for (const Dx in {'-1' : null, '1' : null})
+                  {
+                    if (0 <= (x + Number(Dx)) && (x + Number(Dx)) < mapsize.w && (data.map[x + Number(Dx)][y] == null || data.map[x + Number(Dx)][y].type != "block"))
+                      {
+                        pass["x" + Dx] = true;
+                      }
+                      else
+                      {
+                        pass["x" + Dx] = false;
+                      }
+                  }
+                  
+                  for (const Dy in {'-1' : null, '1' : null})
+                  {
+                    if (0 <= (y + Number(Dy)) && (y + Number(Dy)) < mapsize.h && (data.map[x][y + Number(Dy)] == null || data.map[x][y + Number(Dy)].type != "block"))
+                      {
+                        pass["y" + Dy] = true;
+                      }
+                      else
+                      {
+                        pass["y" + Dy] = false;
+                      }
+                  }
+                  
+                  
+                  if (pass["x" + x] && pass["y" + x]) //You hit on vertex
+                  {
+                    let vec = {x : near.x - ball.x, y : near.y - ball.y};//Circle to point
+
+                    let rad_C2P = Math.atan2(vec.y, vec.x) + Math.PI / 2;
+                    let rad = Math.atan2(ball.dy, ball.dx);
+                    let len = Math.sqrt(Math.pow(ball.dx, 2) + Math.pow(ball.dy, 2));
+
+                    let new_rad = -(rad - rad_C2P) + rad_C2P;
+
+                    while(new_rad < Math.PI) 
+                    {
+                      new_rad += 2 * Math.PI;
+                    }
+                    new_rad -= 2 * Math.PI;
+
+                    if (new_rad >= 0 && new_rad < 0.15) new_rad = 0.15;
+                    if (new_rad >= -0.15 && new_rad < 0) new_rad = -0.15;
+
+                    if (new_rad >= Math.PI - 0.15 && new_rad < Math.PI) new_rad = Math.PI - 0.15;
+                    if (new_rad >= -Math.PI && new_rad < 0.15 - Math.PI) new_rad = 0.15 - Math.PI;
+
+                    let new_vec = {x : len * Math.cos(new_rad), y : len * Math.sin(new_rad)};
+
+                    ball.dx = new_vec.x;
+                    ball.dy = new_vec.y; 
+                  }
+                  else
+                  {
+                    let side = "";
+                    
+                    if (point.x == 1)
+                    {
+                      if (point.y == 1)
+                      {
+                        if (!pass["x1"])
+                        {
+                          side = "down";
+                        }
+                        else if (!pass["y1"])
+                        {
+                          side = "right";
+                        }
+                      }
+                      else //point.y == -1
+                      {
+                        if (!pass["x1"])
+                        {
+                          side = "up";
+                        }
+                        else if (!pass["y-1"])
+                        {
+                          side = "right";
+                        }
+                      }
+                    }
+                    else //point.x == -1
+                    {
+                      if (point.y == 1)
+                      {
+                        if (!pass["x-1"])
+                        {
+                          side = "down";
+                        }
+                        else if (!pass["y1"])
+                        {
+                          side = "left";
+                        }
+                      }
+                      else //point.y == -1
+                      {
+                        if (!pass["x-1"])
+                        {
+                          side = "up";
+                        }
+                        else if (!pass["y-1"])
+                        {
+                          side = "left";
+                        }
+                      }
+                    }
+                    
+                    switch (side)
+                    {
+                      case "down":
+                        ball.dy = Math.abs(ball.dy);
+                        break;
+                      case "left":
+                        ball.dx = -Math.abs(ball.dx);
+                        break;
+                      case "up":
+                        ball.dy = -Math.abs(ball.dy);
+                        break;
+                      case "right":
+                        ball.dx = Math.abs(ball.dx);
+                        break;
+                    }
+                  }
+                }
+                else
+                {
+                  let vec = {x : (ball.x - (x + 0.5) * block_w) / block_w, y : (ball.y - (y + 0.5) * block_h) / block_h};
+                  let rad = Math.atan2(vec.y, vec.x) / Math.PI;
+                  if (rad >= 1 / 4 && rad < 3 / 4) //Downside
+                  {
+                    ball.dy = Math.abs(ball.dy);
+                  }
+                  else if (rad >= 3 / 4 || rad < - 3 / 4) //Leftside
+                  {
+                    ball.dx = -Math.abs(ball.dx);
+                  }
+                  else if (rad >= - 3 / 4 && rad < - 1 / 4) //Upside
+                  {
+                    ball.dy = -Math.abs(ball.dy);
+                  }
+                  else if (rad >= - 1 / 4 || rad < 1 / 4)//Rightside
+                  {
+                    ball.dx = Math.abs(ball.dx);
+                  }
+                }
+                if (--data.map[x][y].health == 0)
+                {
+                  data.map[x][y] = null;
+                  for (let t = 0; t < 30; ++t)
+                  {
+                    data.effect.push(
+                      new Effect(
+                            x * block_w + 1 + Math.random() * (block_w - 2),
+                            y * block_h + 1 + Math.random() * (block_h - 2),
+                            block_h / 5,
+                             min_color, "rect"
+                    ));
+                  }
+                }
+                else
+                {
+                  data.map[x][y].last_hit = ball.id;
+                  data.map[x][y].hit = 0.5;
+                }
+              }
+            }
+            else if (data.map[x][y].type == "ball")
+            {
+              let len = Math.sqrt(Math.pow(ball.x - (x * block_w + block_w / 2), 2) + Math.pow(ball.y - (y * block_h + block_h / 2), 2));
+              if (len < block_h / 3 * 1.5)
+              {
+                ++data.buf_bullets;
+                data.map[x][y] = null;  
+                for (let t = 0; t < 10; ++t)
+                {
+                  data.effect.push(
+                    new Effect( 
+                          x * block_w + block_w / 2 - block_h / 6 + Math.random() * (block_h / 3),
+                          y * block_h + block_h / 2 - block_h / 6 + Math.random() * (block_h / 3),
+                          block_h / 5,
+                           ball_color, "rect"
+                  ));
+                }
+                data.effect.push(
+                  new Effect( 
+                        x * block_w + block_w / 2,
+                        y * block_h + block_h / 2,
+                        block_h / 6,
+                         null, "green_ball"
+                ));
+              }
+            }
+          }
+        }
+      }
+      
+      ctx.fillStyle = 'skyblue';
+      ctx.beginPath();
+      ctx.ellipse(ball.x, ball.y, block_h / 6, block_h / 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+    }
+    
+    
+    if (data.ball.length != data.bullets && !data.lose)
+    {
+      
+      ctx.fillStyle = "skyblue";
+      ctx.font = "24px Arial";
+      ctx.fillText("x" + (data.bullets - data.ball.length), data.start_x - 6, canvas.height - 32); 
+      
+      ctx.beginPath();
+      ctx.ellipse(data.start_x, canvas.height - block_h / 6, block_h / 6, block_h / 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    if (data.ball.length != 0)
+    {
+      let temp = data.ball;
+      data.ball = []
+      for (let i = 0; i < temp.length; ++i)
+      {
+        if (temp[i].y < canvas.height - block_h / 6) 
+        { 
+          data.ball.push(temp[i]); 
+        }
+        else if (data.bullets == temp.length)
+        {
+          data.start_x = temp[i].x;
+        }
+        else 
+        {
+          data.effect.push(
+            new Effect( 
+                  temp[i].x,
+                  temp[i].y,
+                  block_h / 6,
+                   null, "blue_ball"
+          ));
+        }
+      }
+      if (data.ball.length == 0 && data.lock == false)
+      {
+        data.bullets += data.buf_bullets;
+        data.buf_bullets = 0;
+        
+        clear_green_ball();
+        let repeat = setInterval(
+          function () {
+            if (!data.lock)
+            {
+              go_down();
+              check_lose();
+              clearInterval(repeat);
+            }
+          }
+        , 300);
+        
+      }
+    }
+    else if (auto_play && data.lock == false && data.lose == false && data.effect.length == 0)
+    {
+      auto_shoot();
+    }
+    
+    
+    if (data.effect.length != 0)
+    {
+      let temp = data.effect;
+      data.effect = []
+      for (let i = 0; i < temp.length; ++i)
+      {
+        if (temp[i].w > 0) { data.effect.push(temp[i]); }        
+      }
+    }
+	}
+
+	function handleKeydown(e) {
+		if (e.keyCode == 39) {
+      
+		}
+		else if (e.keyCode == 37) {
+		}
+		else if (e.keyCode == 40 && data.lock == false) {
+      //go_down();
+      //check_lose();
+		}
+		else if (e.keyCode == 38) {
+		}
+	}
+
+	function handleMouseLeftdown(e) {
+		let x = e.clientX - canvas.offsetLeft;
+		let y = e.clientY - canvas.offsetTop;
+		let json = {x : x, y : y};
+    
+    const block_w = canvas.width / mapsize.w;
+    const block_h = canvas.height / mapsize.h;
+    
+    let vec = {x : json.x - data.start_x, y : json.y - (canvas.height - block_h / 6)};
+    let len = Math.sqrt(Math.pow(vec.x, 2) + Math.pow(vec.y, 2));
+    vec.x /= len;
+    vec.y /= len;
+    
+    let rad = Math.atan2(vec.y, vec.x);
+    
+    if (data.ball.length == 0 && rad < 0 - 0.15 && rad > -Math.PI + 0.15 && !data.lock && !auto_play && data.lock == false && data.lose == false) shoot(vec, data.bullets);
+	}
+
+	function handleMouseRightdown(e) {
+		let x = e.clientX - canvas.offsetLeft;
+		let y = e.clientY - canvas.offsetTop;
+		
+		let json = {x : x, y : y};
+	}
+    
+	</script>
+</html> 
