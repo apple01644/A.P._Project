@@ -218,6 +218,7 @@ class SBBGame:
 
             state['num_map'] = []
             state['type_map'] = []
+            state['pos'] = self.Data['Shoot Position']
 
             for y in range(self.Game['height']):
                 _ = []
@@ -241,7 +242,7 @@ class SBBGame:
                         _.append(0)
                 state['type_map'].append(_)
                             
-            self.callback_result(self, (state,score, died))
+            self.callback_result(self, (state, score, died))
             
             #file.write("Number of Balls,Shoot PositionX,Shoot PostionY,Shoot Degreed,")
             #for y in range(self.Game['height']):

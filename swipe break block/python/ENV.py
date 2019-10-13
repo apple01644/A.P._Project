@@ -12,6 +12,10 @@ tf.app.flags.DEFINE_boolean("train", False,
 
 FLAGS = tf.app.flags.FLAGS
 
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+tf.keras.backend.set_session(tf.Session(config=config))
+
 MAX_EPISODE = 10000
 TARGET_UPDATE_INTERVAL = 1000
 TRAIN_INTERVAL = 4
@@ -68,7 +72,8 @@ def train():
         total_reward = 0
 
         state = game.dqn_state['num_map']
-        brain.init_state(state)
+        loc = 50
+        brain.init_state(state, loc)
 
         while not terminal:
             if random.random() < epsilon:
@@ -82,9 +87,10 @@ def train():
             game.setACT(action)
             while game.dqn_data == None: pass
             state, reward, terminal = game.dqn_data[0]['num_map'], game.dqn_data[1], game.dqn_data[2] != 0
+            loc = game.dqn_data[0]['pos']['x']
             total_reward += reward
 
-            brain.remember(state, action, reward, terminal)
+            brain.remember(state, action, reward, terminal, loc)
 
             if time_step > OBSERVE and time_step % TRAIN_INTERVAL == 0:
                 brain.train()

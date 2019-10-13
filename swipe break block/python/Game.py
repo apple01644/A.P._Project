@@ -225,6 +225,7 @@ class SBBGame:
 
             state['num_map'] = []
             state['type_map'] = []
+            state['pos'] = self.Data['Shoot Position']
 
             for y in range(self.Game['height']):
                 _ = []

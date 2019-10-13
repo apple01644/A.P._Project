@@ -17,10 +17,10 @@ class DQN:
         self.state = None
         self.loc = None
 
-        self.input_X = tf.placeholder(tf.float32, [None, height, width, self.STATE_LEN])
-        self.input_loc = tf.placeholder(tf.float32, [None, 1])
-        self.input_A = tf.placeholder(tf.int64, [None])
-        self.input_Y = tf.placeholder(tf.float32, [None])
+        self.input_X = tf.placeholder(tf.float32, [None, height, width, self.STATE_LEN], name='X')
+        self.input_loc = tf.placeholder(tf.float32, [None, 1], name='loc')
+        self.input_A = tf.placeholder(tf.int64, [None], name='A')
+        self.input_Y = tf.placeholder(tf.float32, [None], name='Y')
 
         self.Q = self._build_network('main')
         self.cost, self.train_op = self._build_op()
@@ -50,7 +50,7 @@ class DQN:
         copy_op = []
 
         main_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='main')
-        target_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='main')
+        target_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='target')
 
         for main_var, target_var in zip(main_vars, target_vars):
             copy_op.append(target_var.assign(main_var.value()))
@@ -58,26 +58,30 @@ class DQN:
         self.session.run(copy_op)
 
     def get_action(self):
-        Q_value = self.session.run(self.Q, feed_dict={self.input_X: [self.state], self.input_loc: [self.loc]})
+
+        lo = np.array(self.loc).reshape(-1, 1)
+        Q_value = self.session.run(self.Q, feed_dict={self.input_X: [self.state], self.input_loc: lo})
 
         action = np.argmax(Q_value[0])
 
         return action
 
-    def init_state(self, state):
+    def init_state(self, state, loc):
         state = [state for _ in range(self.STATE_LEN)]
         self.state = np.stack(state, axis=2)
+        self.loc = loc
 
-    def remember(self, state, action, reward, terminal):
-        next_state = np.reshape(state, (self.width, self.height, self.STATE_LEN))
+    def remember(self, state, action, reward, terminal, loc):
+        next_state = np.reshape(state, (self.height, self.width, self.STATE_LEN))
         #next_state = np.stack((self.state[:, :, 1:], next_state), axis=2)
 
-        self.memory.append((self.state, next_state, action, reward, terminal))
+        self.memory.append((self.state, next_state, action, reward, terminal, self.loc, loc))
 
         if len(self.memory) > self.REPLAY_MEMORY:
             self.memory.pop(0)
 
         self.state = next_state
+        self.loc = loc
 
     def _sample_memory(self):
         sample_memory = random.sample(self.memory, self.BATCH_SIZE)
@@ -87,20 +91,16 @@ class DQN:
         action     = [memory[2] for memory in sample_memory]
         reward     = [memory[3] for memory in sample_memory]
         terminal   = [memory[4] for memory in sample_memory]
+        loc        = [memory[5] for memory in sample_memory]
+        nloc       = [memory[6] for memory in sample_memory]
 
-        return state, next_state, action, reward, terminal
+        return state, next_state, action, reward, terminal, loc, nloc
 
     def train(self):
-        state, next_state, action, reward, terminal = self._sample_memory()
+        state, next_state, action, reward, terminal, loc, nloc = self._sample_memory()
 
-        state = np.array(state)
-        next_state = np.array(next_state)
-
-        loc = state[:, 0]
-        state = state[:, 1:]
-
-        nloc = next_state[:, 0]
-        next_state = next_state[:, 1:]
+        nloc = np.array(nloc).reshape(-1, 1)
+        loc  = np.array(loc).reshape(-1, 1)
 
         target_Q_value = self.session.run(self.target_Q, feed_dict={self.input_X: next_state, self.input_loc:nloc})
 
@@ -111,7 +111,7 @@ class DQN:
             else:
                 Y.append(reward[i] + self.GAMMA * np.max(target_Q_value[i]))
 
-            self.session.run(self.train_op, 
+        self.session.run(self.train_op, 
                 feed_dict={
                     self.input_X: state,
                     self.input_loc: loc,
@@ -120,12 +120,13 @@ class DQN:
                 }
             )
 
-            print("loss : {0}".format(self.session.run(self.cost, feed_dict={
+        print("loss : {0}".format(self.session.run(self.cost, feed_dict={
                     self.input_X: state,
                     self.input_loc: loc,
                     self.input_A: action,
                     self.input_Y: Y
                 })))
+
 
 
 if __name__ == '__main__':
