@@ -79,7 +79,7 @@ class SBBGame:
             while True:
                 cursor = random.randrange(0, self.Game['width'])
                 if self.Game['Map'][cursor][0]:
-                    self.Game['Map'][cursor][0] = Block('block', self.Game['Score'])
+                    self.Game['Map'][cursor][0] = Block('ball', 1)
                     break
                 
             for x in range(self.Game['width']):
@@ -157,7 +157,6 @@ class SBBGame:
             self.Data['Number of Balls'] = self.Game['Number of Balls']
             self.Data['Shoot Position'] = self.Game['Shoot Position']
             self.Data['Log'] = []
-
             self.Data['Map'] = [['' for y in range(self.Game['height'])] for x in range(self.Game['width'])]
             for y in range(self.Game['height']):
                 for x in range(self.Game['width']):
@@ -167,6 +166,11 @@ class SBBGame:
                             self.Data['Map'][x][y] = 'block:' + str(block.num)
                         elif block.type == 'ball':
                             self.Data['Map'][x][y] = 'ball'
+                        else:
+                            print('Wrong')
+                            zero = 0
+                            one = 1
+                            error = one / zero
         
         def assess_end():
             score = self.assess_func(self.Data)
@@ -181,14 +185,22 @@ class SBBGame:
             
             if self.save_data:
                 self.file.write('\n')
-                self.file.write('%12.6f,%d,%12.6f,%12.6f' % (score, self.Data['Number of Balls'], self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
+                self.file.write('%12.6f,%d,%12.6f,%12.6f,' % (score, self.Data['Number of Balls'], self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
     
                 for y in range(self.Game['height']):
                     for x in range(self.Game['width']):
                         if self.Data['Map'][x][y].startswith('block:'):
-                            self.file.write("1,%d," % int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]))
+                            self.file.write("%d," % int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]))
+                        elif self.Data['Map'][x][y] == 'ball':
+                            self.file.write("1,")
                         else:
-                            self.file.write("0,1,")
+                            self.file.write("0,")
+                for y in range(self.Game['height']):
+                    for x in range(self.Game['width']):
+                        if self.Data['Map'][x][y] == 'ball':
+                            self.file.write("1,")
+                        else:
+                            self.file.write("0,")
 
                 deg = int(self.Data['Shoot Degreed'] * 128)
                 for s in range(129):

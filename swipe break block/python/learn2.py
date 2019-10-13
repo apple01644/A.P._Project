@@ -4,85 +4,110 @@ import pandas as pd
 import os.path
 import random
 
-EPOCH = 100000
-BATCH_SIZE = 500
-
 dataset = pd.read_csv('1.csv', sep=',', header=None).iloc
 
 #dataX = np.array(dataset[:,1:1 + 3 + 108 - 1], dtype=np.float32)#(110,)
 #dataA = np.array(dataset[:,111:111 + 130 - 1], dtype=np.float32)#(129,)
 #dataY = np.array(dataset[:,0], dtype=np.float32) #()
 
-dataset = tf.data.Dataset.from_tensor_slices(dataset[:,:111 + 130 - 1])
-dataset = dataset.shuffle(100000).repeat().padded_batch(BATCH_SIZE, padded_shapes=[None])
+#print(dataset[0][0]) #<점수>
+#print(dataset[0][1:4]) #<공의 갯수>, <발사 위치.x>, <발사 위치.y>
 
-itr = dataset.make_one_shot_iterator()
+#print(dataset[0][4:58]) #<블럭의 갯수>
+#print(dataset[0][58:112]) #<초록 공인지 여부>
+
+#print(dataset[0][112:241]) #<발사 각도>
+
+S = tf.placeholder(tf.float32, [None, 1], 'S')
+I = tf.placeholder(tf.float32, [None, 3], 'I')
+A = tf.placeholder(tf.float32, [None, 129], 'A')
+NM = tf.placeholder(tf.float32, [None, 6, 9, 1], 'NM')
+TM = tf.placeholder(tf.float32, [None, 6, 9, 1], 'TM')
+is_training = tf.placeholder(tf.bool)
+
 
 sess = tf.Session()
-
-X = tf.placeholder(tf.float32, shape=[None, 239])
-Y = tf.placeholder(tf.float32, shape=[None, 1])
-
-global_step = tf.Variable(0, trainable=False, name='global_step')
-
-rng = np.sqrt(6.0 / (239 + 256))
-W0 = tf.Variable(tf.random_uniform([239, 256], -rng, rng))
-rng = np.sqrt(3.0 / (239 + 256))
-B = tf.Variable(tf.random_uniform([256], -rng, rng))
-
-
-rng = np.sqrt(6.0 / (256 + 256))
-W1 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W2 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W3 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W4 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W5 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W6 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W7 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-W8 = tf.Variable(tf.random_uniform([256, 256], -rng, rng))
-rng = np.sqrt(6.0 / (256 + 1))
-W9 = tf.Variable(tf.random_uniform([256, 1], -rng, rng))
-
-L0 = tf.add(tf.matmul(X, W0), B)
-L1 = tf.matmul(L0, W1)
-L2 = tf.matmul(L1, W2)
-L3 = tf.matmul(L2, W3)
-L4 = tf.matmul(L3, W4)
-L5 = tf.matmul(L4, W5)
-L6 = tf.matmul(L5, W6)
-L7 = tf.matmul(L6, W7)
-L8 = tf.matmul(L7, W8)
-model = tf.matmul(L8, W9)
-
-cost = tf.reduce_mean(tf.square(model - Y))
-
-opt = tf.train.AdamOptimizer(0.0001)
-train_op = opt.minimize(cost)
-
-saver = tf.train.Saver(tf.global_variables())
-merged = tf.summary.merge_all()
-writer = tf.summary.FileWriter('/log', sess.graph)
-
 sess.run(tf.global_variables_initializer())
 
-count = 0
+
+dataset_size = len(dataset[:][0])
+
+BATCH_SIZE = 3
+EPOCH = 100
+
+foo = tf.add(S, S)
+
+#model
+L1 = tf.layers.conv2d(NM, 32, [3, 3], activation=tf.nn.relu)
+L1 = tf.layers.max_pooling2d(L1, [2, 2], [2, 2])
+L1 = tf.layers.dropout(L1, 0.7, is_training)
+
+L2 = tf.contrib.layers.flatten(L1)
+L2 = tf.layers.dense(L2, 256, activation=tf.nn.relu)
+L2 = tf.layers.dropout(L2, 0.5, is_training)
+
+End_NM = tf.layers.dense(L2, 256, activation=None)
+
+
+L1 = tf.layers.conv2d(TM, 32, [3, 3], activation=tf.nn.relu)
+L1 = tf.layers.max_pooling2d(L1, [2, 2], [2, 2])
+L1 = tf.layers.dropout(L1, 0.7, is_training)
+
+L2 = tf.contrib.layers.flatten(L1)
+L2 = tf.layers.dense(L2, 256, activation=tf.nn.relu)
+L2 = tf.layers.dropout(L2, 0.5, is_training)
+
+End_TM = tf.layers.dense(L2, 256, activation=None)
+
+
+c1 = tf.constant([[1, 3, 5]])
+
+c2 = tf.constant([[1, 3, 7]])
+
+merge = tf.add(tf.add(End_NM, End_TM), tf.add(tf.layers.dense(I, 256, activation=None), tf.layers.dense(A, 256, activation=None)))
+merge = tf.layers.dense(merge, 256, activation=None)
+merge = tf.layers.dense(merge, 256, activation=None)
+model = tf.layers.dense(merge, 1, activation=None)
+
+cost = tf.square(tf.reduce_mean(model - S))
+opt = tf.train.AdamOptimizer(0.001).minimize(cost)
+
 for _ in range(EPOCH):
-    
-    datas = sess.run(itr.get_next())
+    indexs = []
+    for __ in range(BATCH_SIZE):
+        indexs.append(random.randint(0, dataset_size))
 
-    loss, what = sess.run([cost, train_op], feed_dict = {X : datas[:, 1:240], Y : datas[:, 0:1]})
-
-    #writer.add_summary(summary, global_step=global_step)
-    print('Take #%d : %12.6f' % (count, loss))
-
-    if _ % 100 == 0:
-        prec = tf.argmax(model, 1)
-        target = tf.argmax(Y, 1)
+    score = np.array([dataset[index][0] for index in indexs], dtype=np.float32).reshape(BATCH_SIZE, 1)
     
-        acc = tf.reduce_mean(tf.cast(tf.equal(target, prec), tf.float32))
-        print('Accuract : %12.6f' % sess.run(acc * 100, feed_dict = {X : datas[:, 1:240], Y : datas[:, 0:1]}))
+    info = np.array([dataset[index][1:4] for index in indexs], dtype=np.float32).reshape(BATCH_SIZE, 3)
     
-    count += 1
-        
-print('done')
-saver.save(sess, 'dnn.ckpt', global_step=global_step)
+    act = np.array([dataset[index][112:241] for index in indexs], dtype=np.float32).reshape(BATCH_SIZE, 129)
+    
+    num_map = np.array([[
+        dataset[index][ 4:10],
+        dataset[index][10:16],
+        dataset[index][16:22],
+        dataset[index][22:28],
+        dataset[index][28:34],
+        dataset[index][34:40],
+        dataset[index][40:46],
+        dataset[index][46:52],
+        dataset[index][52:58]]  for index in indexs], dtype=np.float32).reshape(BATCH_SIZE, 6, 9, 1)
+
+    type_map = np.array([[
+        dataset[index][ 58: 64],
+        dataset[index][ 64: 70],
+        dataset[index][ 70: 76],
+        dataset[index][ 76: 82],
+        dataset[index][ 82: 88],
+        dataset[index][ 88: 94],
+        dataset[index][ 94:100],
+        dataset[index][100:106],
+        dataset[index][106:112]] for index in indexs], dtype=np.float32).reshape(BATCH_SIZE, 6, 9, 1)
+
+    action = np.array([dataset[index][112:241] for index in indexs], dtype=np.float32)
+
+    
+    sess.run(End_TM, feed_dict={S : score, I : info, A : act, NM : num_map, TM : type_map, is_training : True})
+    
+    print(_)
