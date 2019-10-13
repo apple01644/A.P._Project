@@ -328,3 +328,7 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+*.index
+swipe break block/python/model/dqn.ckpt-1513.data-00000-of-00001
+*.data-00000-of-00001
+*.DESKTOP-AIPROJ
