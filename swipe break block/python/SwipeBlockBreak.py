@@ -34,17 +34,26 @@ class SBBGame:
                 y = int(log[log.find('/')+1:log.find(':')])
                 t = int(log[log.find(':')+1:])
                 score += 1 * (1 + y / 10)
-
+        died = 0
         
         for x in range(self.Game['width']):   
             block = self.Game['Map'][x][self.Game['height'] - 2]
             if block:
                if block.type == 'block':
-                    return -1
+                    died = 1
         
         score /= data['Number of Balls']
 
-        return score
+        return {'score' : score, 'died' : died}
+
+    def callback_shootdegreed(self): # 0 ~ 128
+        return random.random() * 128
+
+    def callback_result(self, data):
+        pass
+
+    def callback_init(self, state):
+        pass
     
     def run(self):
         class Block:
@@ -112,6 +121,35 @@ class SBBGame:
                         initialize()
                         return
             assess_begin()
+
+            state = {}
+            state['num_map'] = []
+            state['type_map'] = []
+
+            for y in range(self.Game['height']):
+                _ = []
+                for x in range(self.Game['width']):
+                    if self.Data['Map'][x][y].startswith('block:'):
+                        _.append(int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]) / self.Data['Number of Balls'])
+                    elif self.Data['Map'][x][y] == 'ball':
+                        _.append(5)
+                    else:
+                        _.append(0)
+                state['num_map'].append(_)
+                
+            for y in range(self.Game['height']):
+                _ = []
+                for x in range(self.Game['width']):
+                    if self.Data['Map'][x][y].startswith('block:'):
+                        _.append(1)
+                    elif self.Data['Map'][x][y] == 'ball':
+                        _.append(-1)
+                    else:
+                        _.append(0)
+                state['type_map'].append(_)
+                            
+            self.callback_init(self, (state))
+            
             self.Game['State'] = 'shoot'
 
             if self.model:
@@ -173,8 +211,38 @@ class SBBGame:
                             error = one / zero
         
         def assess_end():
-            score = self.assess_func(self.Data)
+            result = self.assess_func(self.Data)
+            score = result['score']
+            died = result['died']
+            state = {}
 
+            state['num_map'] = []
+            state['type_map'] = []
+
+            for y in range(self.Game['height']):
+                _ = []
+                for x in range(self.Game['width']):
+                    if self.Data['Map'][x][y].startswith('block:'):
+                        _.append(int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]) / self.Data['Number of Balls'])
+                    elif self.Data['Map'][x][y] == 'ball':
+                        _.append(5)
+                    else:
+                        _.append(0)
+                state['num_map'].append(_)
+                
+            for y in range(self.Game['height']):
+                _ = []
+                for x in range(self.Game['width']):
+                    if self.Data['Map'][x][y].startswith('block:'):
+                        _.append(1)
+                    elif self.Data['Map'][x][y] == 'ball':
+                        _.append(-1)
+                    else:
+                        _.append(0)
+                state['type_map'].append(_)
+                            
+            self.callback_result(self, (state,score, died))
+            
             #file.write("Number of Balls,Shoot PositionX,Shoot PostionY,Shoot Degreed,")
             #for y in range(self.Game['height']):
             #    for x in range(self.Game['width']):
@@ -185,14 +253,14 @@ class SBBGame:
             
             if self.save_data:
                 self.file.write('\n')
-                self.file.write('%12.6f,%12.6f,%12.6f,' % (score, self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
+                self.file.write('%d, %12.6f,%12.6f,%12.6f,' % (died, score, self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
     
                 for y in range(self.Game['height']):
                     for x in range(self.Game['width']):
                         if self.Data['Map'][x][y].startswith('block:'):
                             self.file.write("%12.6f," % (int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]) / self.Data['Number of Balls']))
                         elif self.Data['Map'][x][y] == 'ball':
-                            self.file.write("1,")
+                            self.file.write("5,")
                         else:
                             self.file.write("0,")
                 for y in range(self.Game['height']):
@@ -358,7 +426,7 @@ class SBBGame:
                 pygame.display.flip()
             else: # auto Shooting
                 if self.Game['State'] == 'shoot':
-                    action_Shoot(random.random())
+                    action_Shoot(self.callback_shootdegreed(self) / 128.0)
 
             #=========================================
             if self.Game['State'] == 'shooting':
@@ -534,11 +602,24 @@ class SBBGame:
 
 game = SBBGame()
 game.user = False
-game.start()
 
-#times = 0
-#att = 0
-#while times < 1:
+def callback_initialize(self, state):
+    print(state)
+    return
+
+def shoot_degreed(self): # 0 ~ 128
+    return random.random() * 128
+
+def callback_result(self, data):
+    print(data)
+    return
+
+game.callback_shootdegreed = shoot_degreed
+game.callback_init = callback_initialize
+game.callback_result = callback_result
+
+
+game.start()
 
 last_att = 0
 while game.attempt < 1000:
@@ -546,7 +627,5 @@ while game.attempt < 1000:
     if game.attempt > last_att + 100:
         last_att += 100
         print('======== %6d ========' % last_att)
-#    times += 1
-#    print('Stage %d Clear' % times)
-#    att = game.attempt
+        
 game.Run = False
