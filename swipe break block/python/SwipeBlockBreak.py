@@ -185,20 +185,22 @@ class SBBGame:
             
             if self.save_data:
                 self.file.write('\n')
-                self.file.write('%12.6f,%d,%12.6f,%12.6f,' % (score, self.Data['Number of Balls'], self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
+                self.file.write('%12.6f,%12.6f,%12.6f,' % (score, self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
     
                 for y in range(self.Game['height']):
                     for x in range(self.Game['width']):
                         if self.Data['Map'][x][y].startswith('block:'):
-                            self.file.write("%d," % int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]))
+                            self.file.write("%12.6f," % (int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]) / self.Data['Number of Balls']))
                         elif self.Data['Map'][x][y] == 'ball':
                             self.file.write("1,")
                         else:
                             self.file.write("0,")
                 for y in range(self.Game['height']):
                     for x in range(self.Game['width']):
-                        if self.Data['Map'][x][y] == 'ball':
+                        if self.Data['Map'][x][y].startswith('block:'):
                             self.file.write("1,")
+                        elif self.Data['Map'][x][y] == 'ball':
+                            self.file.write("-1,")
                         else:
                             self.file.write("0,")
 
@@ -207,7 +209,7 @@ class SBBGame:
                     if deg == s:
                         self.file.write('1,')
                     else:
-                        self.file.write('-1,')
+                        self.file.write('0,')
                     
                 
             self.last_score = score
@@ -537,10 +539,13 @@ game.start()
 #times = 0
 #att = 0
 #while times < 1:
+
+last_att = 0
 while game.attempt < 1000:
     time.sleep(1)
-    if game.attempt % 100 == 0:
-        print(game.attempt)
+    if game.attempt > last_att + 100:
+        last_att += 100
+        print('======== %6d ========' % last_att)
 #    times += 1
 #    print('Stage %d Clear' % times)
 #    att = game.attempt
