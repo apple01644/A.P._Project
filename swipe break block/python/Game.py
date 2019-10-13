@@ -79,6 +79,7 @@ class SBBGame:
                 self.id = id
         
         def action_Shoot(deg):
+            print('degreed is %12.6f' % deg)
             rad = (deg * (pi - 0.3)) - pi + 0.15
             self.Game['Left Balls'] = self.Game['Number of Balls']
             self.Game['Shoot Radian'] = rad
@@ -326,7 +327,7 @@ class SBBGame:
                     return True
             return False
 
-        if self.user:
+        if self.user or True:
             def draw_rect(surface, rgb, objT, worldT):
                 position = np.dot(np.array((objT[0], objT[1],1), dtype=np.float), worldT)
                 scale = np.array((objT[2] * worldT[0][0], objT[3] * worldT[1][1]), dtype=np.float)
@@ -432,11 +433,11 @@ class SBBGame:
 
     
                 pygame.display.flip()
-            else: # auto Shooting
-                if self.Game['State'] == 'shoot':
-                    while self.action == None: pass
-                    action_Shoot(self.action)
-                    self.action = None
+            #else: # auto Shooting
+            if self.Game['State'] == 'shoot':
+                while self.action == None: pass
+                action_Shoot(self.action / 128.0)
+                self.action = None
 
             #=========================================
             if self.Game['State'] == 'shooting':

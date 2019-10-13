@@ -119,13 +119,13 @@ class DQN:
                     self.input_Y: Y
                 }
             )
-
+'''
         print("loss : {0}".format(self.session.run(self.cost, feed_dict={
                     self.input_X: state,
                     self.input_loc: loc,
                     self.input_A: action,
                     self.input_Y: Y
-                })))
+                })))'''
 
 
 

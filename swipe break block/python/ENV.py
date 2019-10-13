@@ -66,6 +66,7 @@ def train():
     epsilon = 1.0
     time_step = 0
     total_reward_list = []
+    ui_on = False
 
     for episode in range(MAX_EPISODE):
         terminal = False
@@ -90,6 +91,8 @@ def train():
             loc = game.dqn_data[0]['pos']['x']
             total_reward += reward
 
+            game.dqn_data = None
+
             brain.remember(state, action, reward, terminal, loc)
 
             if time_step > OBSERVE and time_step % TRAIN_INTERVAL == 0:
@@ -103,7 +106,10 @@ def train():
         print('게임횟수 : {0}, 점수: {1}'.format(episode + 1, total_reward))
 
         total_reward_list.append(total_reward)
-
+        
+        if episode > 600 and (not ui_on):
+            game.user = True
+            ui_on = True
         if episode % 10 == 0:
             summary = sess.run(summary_merged,
                                 feed_dict={rewards: total_reward_list})
