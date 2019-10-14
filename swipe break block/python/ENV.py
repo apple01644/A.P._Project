@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 import random
+import matplotlib.pyplot as plt
 
 from DQN import DQN
 from Game import SBBGame
@@ -61,11 +62,15 @@ def train():
     writer = tf.summary.FileWriter('logs', sess.graph)
     summary_merged = tf.summary.merge_all()
 
+    reward_mean = tf.reduce_mean(rewards)
+    logs = open('logs/log.dat', "a")
+
     brain.update_target_network()
 
     epsilon = 1.0
     time_step = 0
     total_reward_list = []
+    total_reward_mean = []
     ui_on = False
 
     for episode in range(MAX_EPISODE):
@@ -111,10 +116,18 @@ def train():
             game.user = True
             ui_on = True
         if episode % 10 == 0:
+            plt.clf()
             summary = sess.run(summary_merged,
                                 feed_dict={rewards: total_reward_list})
+            rm = sess.run(reward_mean,
+                                feed_dict={rewards: total_reward_list})
+            total_reward_mean.append(rm)
+            plt.plot(total_reward_mean)
+            plt.draw()
             writer.add_summary(summary, time_step)
             total_reward_list = []
+
+            logs.write(str(rm)+"/")
 
         if episode % 100 == 0:
             saver.save(sess, 'model/dqn.ckpt', global_step=time_step)
@@ -154,4 +167,3 @@ def main():
 
 if __name__ == '__main__':
     train()
-

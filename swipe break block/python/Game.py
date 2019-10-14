@@ -79,7 +79,6 @@ class SBBGame:
                 self.id = id
         
         def action_Shoot(deg):
-            print('degreed is %12.6f' % deg)
             rad = (deg * (pi - 0.3)) - pi + 0.15
             self.Game['Left Balls'] = self.Game['Number of Balls']
             self.Game['Shoot Radian'] = rad
@@ -226,7 +225,6 @@ class SBBGame:
 
             state['num_map'] = []
             state['type_map'] = []
-            state['pos'] = self.Data['Shoot Position']
 
             for y in range(self.Game['height']):
                 _ = []
@@ -327,7 +325,7 @@ class SBBGame:
                     return True
             return False
 
-        if self.user or True:
+        if self.user:
             def draw_rect(surface, rgb, objT, worldT):
                 position = np.dot(np.array((objT[0], objT[1],1), dtype=np.float), worldT)
                 scale = np.array((objT[2] * worldT[0][0], objT[3] * worldT[1][1]), dtype=np.float)
@@ -433,182 +431,181 @@ class SBBGame:
 
     
                 pygame.display.flip()
-            #else: # auto Shooting
-            for _____ in range(5):
+            else: # auto Shooting
                 if self.Game['State'] == 'shoot':
                     while self.action == None: pass
-                    action_Shoot(self.action / 128.0)
+                    action_Shoot(self.action)
                     self.action = None
 
-                #=========================================
-                if self.Game['State'] == 'shooting':
-                    if self.Game['Left Balls'] > 0:
-                        if t - self.Game['Last Shoot'] > 30:
-                            self.Game['Shoot Balls'].append(Ball(
-                                self.Game['Shoot Position']['x'], 
-                                self.Game['Shoot Position']['y'], 
-                                cos(self.Game['Shoot Radian']), 
-                                sin(self.Game['Shoot Radian']),
-                                self.Game['Left Balls']
-                            ))
-                            self.Game['Last Shoot'] = t
-                            self.Game['Left Balls'] -= 1
-                    else:
-                        if len(self.Game['Shoot Balls']) == 0: #End of Turn
-                            self.Game['Score'] += 1
-                            self.Game['State'] = 'cleanup'
-                elif self.Game['State'] == 'prepare':
-                    action_Prepare()
-                elif self.Game['State'] == 'cleanup':
-                    action_CleanUp()
-                for ball in self.Game['Shoot Balls']:
-                    ball.x += ball.vx * dt
-                    ball.y += ball.vy * dt
-                    if ball.x > 100 - self.Game['Ball Radius']:
-                        ball.x = 100 - self.Game['Ball Radius']
-                        ball.vx = -abs(ball.vx)
-                    if ball.x < self.Game['Ball Radius']:
-                        ball.x = self.Game['Ball Radius']
-                        ball.vx = abs(ball.vx)
-                    if ball.y < self.Game['Ball Radius']:
-                        ball.y = self.Game['Ball Radius']
-                        ball.vy = abs(ball.vy)
-                      
-                    for y in range(self.Game['height']):
-                        for x in range(self.Game['width']):
-                            block = self.Game['Map'][x][y]
-                            if block:
-                                if block.type == 'block':
-                                    if collision_between_rect_circle(x * 100 / 6, y * 100 / 9, 100 / 6, 100 / 9, ball.x, ball.y, self.Game['Ball Radius']):
-                                        if (ball.y > (y * 100 / 9 + 1) + (100 / 9 - 2) or ball.y < (y * 100 / 9 + 1)) and (ball.x > (x * 100 / 6 + 1) + (100 / 6 - 2) or ball.x < (x * 100 / 6 + 1)):
-                                            near = {}
-                                            point = {'x' : 0, 'y' : 0}
-                                                
-                                            if ball.x > (x * 100 / 6 + 1) + (100 / 6 - 2) / 2:
-                                                near['x'] = (x * 100 / 6 + 1) + (100 / 6 - 2)
-                                                point['x'] = 1
-                                            else:
-                                                near['x'] = (x * 100 / 6 + 1)
-                                                point['x'] = -1
-                                                
-                                            if ball.y > (y * 100 / 9 + 1) + (100 / 9 - 2) / 2:
-                                                near['y'] = (y * 100 / 9 + 1) + (100 / 9 - 2)
-                                                point['y'] = 1
-                                            else:
-                                                near['y'] = (y * 100 / 9 + 1)
-                                                point['y'] = -1
-                                                
-                                            passed = {}
-                                            for Dx in {'-1' : '-1', '1' : '1'}:
-                                                passed['x' + Dx] = 0 <= (x + int(Dx)) < 6 and (self.Game['Map'][x + int(Dx)][y] == None or self.Game['Map'][x + int(Dx)][y].type != 'block')
-                                            for Dy in {'-1' : '-1', '1' : '1'}:
-                                                passed['y' + Dy] = 0 <= (y + int(Dy)) < 9 and (self.Game['Map'][x][y + int(Dy)] == None or self.Game['Map'][x][y + int(Dy)].type != 'block')
-                                                
-                                            if (passed['x' + str(point['x'])] and passed['y' + str(point['y'])]): #You hit on vertex
-                                                vec = {'x' : near['x'] - ball.x, 'y' : near['y'] - ball.y}#Circle to point
-                                                rad_C2P = atan2(vec['y'], vec['x']) + pi / 2
-                                                rad = atan2(ball.vy, ball.vx)
-                                                length = sqrt(ball.vx ** 2 + ball.vy ** 2)
-                                                new_rad = -(rad - rad_C2P) + rad_C2P
-                                                
-                                                while new_rad < pi:
-                                                    new_rad += 2 * pi
-                                                new_rad -= 2 * pi
-                                                
-                                                if new_rad >= 0 and new_rad < 0.15:
-                                                    new_rad = 0.15
-                                                if new_rad >= -0.15 and new_rad < 0:
-                                                    new_rad = -0.15
-                                                if new_rad >= pi - 0.15 and new_rad < pi:
-                                                    new_rad = pi - 0.15
-                                                if new_rad >= -pi and new_rad < 0.15 - pi:
-                                                    new_rad = 0.15 - pi
-                                                
-                                                new_vec = {'x' : length * cos(new_rad), 'y' : length * sin(new_rad)}
-                                                ball.vx = new_vec['x']
-                                                ball.vy = new_vec['y']
-                                            else:
-                                                side = ''
-                                                if point['x'] == 1:
-                                                    if point['y'] == 1:
-                                                        if not passed['x1']:
-                                                            side = 'down'
-                                                        elif not passed['y1']:
-                                                            side = 'right'
-                                                    else:#point['y'] == -1
-                                                        if not passed['x1']:
-                                                            side = 'up'
-                                                        elif not passed['y-1']:
-                                                            side = 'right'
-                                                else: #point['x'] == -1
-                                                    if point['y'] == 1:
-                                                        if not passed['x-1']:
-                                                            side = 'down'
-                                                        elif not passed['y1']:
-                                                            side = 'left'
-                                                    else: #point['y'] == -1
-                                                        if not passed['x-1']:
-                                                            side = 'up'
-                                                        elif not passed['y-1']:
-                                                            side = 'left'
-                                                
-                                                if side == 'down':
-                                                    ball.vy = abs(ball.vy)
-                                                elif side == 'left':
-                                                    ball.vx = -abs(ball.vx)
-                                                elif side == 'up':
-                                                    ball.vy = -abs(ball.vy)
-                                                elif side == 'right':
-                                                    ball.vx = abs(ball.vx)
-                                        else:
-                                            vec = {'x' : (ball.x - (x + 0.5) * 100 / 6) * 6, 'y' : (ball.y - (y + 0.5) * 100 / 9) * 9}
-                                            rad = atan2(vec['y'], vec['x']) / pi
-                                            if rad >= 1 / 4 and rad < 3 / 4: #Downside
-                                                ball.vy = abs(ball.vy)
-                                            elif rad >= 3 / 4 or rad < - 3 / 4: #Leftside
-                                                ball.vx = -abs(ball.vx)
-                                            elif rad >= - 3 / 4 and rad < - 1 / 4: #Upside
-                                                ball.vy = -abs(ball.vy)
-                                            elif rad >= - 1 / 4 or rad < 1 / 4: #Rightside
-                                                ball.vx = abs(ball.vx)
-                                        if block.lastHitId != ball.id or block.lastHitTime + dt * 15 < t: 
-                                            block.num -= 1
-                                            self.Data['Log'].append(str(x)+"/"+str(y)+":"+str(block.num))
-                                            block.lastHitId = ball.id
-                                            block.lastHitTime = t
-                                elif block.type == 'ball':
-                                    vec = { 'x' : ball.x - 100 / 6 * (x + 0.5), 'y' : ball.y - 100 / 9 * (y + 0.5) }
-                                    length = sqrt(vec['x'] ** 2 + vec['y'] ** 2)
-                                    if length <= self.Game['Ball Radius'] * 2 and block.num > 0:
-                                        block.num = 0
-                                        self.Data['Log'].append("!"+str(x)+"/"+str(y)+":"+str(block.num))
-                                #=========================================
-                #Remove Block
+            #=========================================
+            if self.Game['State'] == 'shooting':
+                if self.Game['Left Balls'] > 0:
+                    if t - self.Game['Last Shoot'] > 30:
+                        self.Game['Shoot Balls'].append(Ball(
+                            self.Game['Shoot Position']['x'], 
+                            self.Game['Shoot Position']['y'], 
+                            cos(self.Game['Shoot Radian']), 
+                            sin(self.Game['Shoot Radian']),
+                            self.Game['Left Balls']
+                        ))
+                        self.Game['Last Shoot'] = t
+                        self.Game['Left Balls'] -= 1
+                else:
+                    if len(self.Game['Shoot Balls']) == 0: #End of Turn
+                        self.Game['Score'] += 1
+                        self.Game['State'] = 'cleanup'
+            elif self.Game['State'] == 'prepare':
+                action_Prepare()
+            elif self.Game['State'] == 'cleanup':
+                action_CleanUp()
+            for ball in self.Game['Shoot Balls']:
+                ball.x += ball.vx * dt
+                ball.y += ball.vy * dt
+                if ball.x > 100 - self.Game['Ball Radius']:
+                    ball.x = 100 - self.Game['Ball Radius']
+                    ball.vx = -abs(ball.vx)
+                if ball.x < self.Game['Ball Radius']:
+                    ball.x = self.Game['Ball Radius']
+                    ball.vx = abs(ball.vx)
+                if ball.y < self.Game['Ball Radius']:
+                    ball.y = self.Game['Ball Radius']
+                    ball.vy = abs(ball.vy)
+                  
                 for y in range(self.Game['height']):
                     for x in range(self.Game['width']):
                         block = self.Game['Map'][x][y]
                         if block:
                             if block.type == 'block':
-                                if block.num <= 0:
-                                    self.Game['Map'][x][y] = None
-                                    continue
+                                if collision_between_rect_circle(x * 100 / 6, y * 100 / 9, 100 / 6, 100 / 9, ball.x, ball.y, self.Game['Ball Radius']):
+                                    if (ball.y > (y * 100 / 9 + 1) + (100 / 9 - 2) or ball.y < (y * 100 / 9 + 1)) and (ball.x > (x * 100 / 6 + 1) + (100 / 6 - 2) or ball.x < (x * 100 / 6 + 1)):
+                                        near = {}
+                                        point = {'x' : 0, 'y' : 0}
+                                            
+                                        if ball.x > (x * 100 / 6 + 1) + (100 / 6 - 2) / 2:
+                                            near['x'] = (x * 100 / 6 + 1) + (100 / 6 - 2)
+                                            point['x'] = 1
+                                        else:
+                                            near['x'] = (x * 100 / 6 + 1)
+                                            point['x'] = -1
+                                            
+                                        if ball.y > (y * 100 / 9 + 1) + (100 / 9 - 2) / 2:
+                                            near['y'] = (y * 100 / 9 + 1) + (100 / 9 - 2)
+                                            point['y'] = 1
+                                        else:
+                                            near['y'] = (y * 100 / 9 + 1)
+                                            point['y'] = -1
+                                            
+                                        passed = {}
+                                        for Dx in {'-1' : '-1', '1' : '1'}:
+                                            passed['x' + Dx] = 0 <= (x + int(Dx)) < 6 and (self.Game['Map'][x + int(Dx)][y] == None or self.Game['Map'][x + int(Dx)][y].type != 'block')
+                                        for Dy in {'-1' : '-1', '1' : '1'}:
+                                            passed['y' + Dy] = 0 <= (y + int(Dy)) < 9 and (self.Game['Map'][x][y + int(Dy)] == None or self.Game['Map'][x][y + int(Dy)].type != 'block')
+                                            
+                                        if (passed['x' + str(point['x'])] and passed['y' + str(point['y'])]): #You hit on vertex
+                                            vec = {'x' : near['x'] - ball.x, 'y' : near['y'] - ball.y}#Circle to point
+                                            rad_C2P = atan2(vec['y'], vec['x']) + pi / 2
+                                            rad = atan2(ball.vy, ball.vx)
+                                            length = sqrt(ball.vx ** 2 + ball.vy ** 2)
+                                            new_rad = -(rad - rad_C2P) + rad_C2P
+                                            
+                                            while new_rad < pi:
+                                                new_rad += 2 * pi
+                                            new_rad -= 2 * pi
+                                            
+                                            if new_rad >= 0 and new_rad < 0.15:
+                                                new_rad = 0.15
+                                            if new_rad >= -0.15 and new_rad < 0:
+                                                new_rad = -0.15
+                                            if new_rad >= pi - 0.15 and new_rad < pi:
+                                                new_rad = pi - 0.15
+                                            if new_rad >= -pi and new_rad < 0.15 - pi:
+                                                new_rad = 0.15 - pi
+                                            
+                                            new_vec = {'x' : length * cos(new_rad), 'y' : length * sin(new_rad)}
+                                            ball.vx = new_vec['x']
+                                            ball.vy = new_vec['y']
+                                        else:
+                                            side = ''
+                                            if point['x'] == 1:
+                                                if point['y'] == 1:
+                                                    if not passed['x1']:
+                                                        side = 'down'
+                                                    elif not passed['y1']:
+                                                        side = 'right'
+                                                else:#point['y'] == -1
+                                                    if not passed['x1']:
+                                                        side = 'up'
+                                                    elif not passed['y-1']:
+                                                        side = 'right'
+                                            else: #point['x'] == -1
+                                                if point['y'] == 1:
+                                                    if not passed['x-1']:
+                                                        side = 'down'
+                                                    elif not passed['y1']:
+                                                        side = 'left'
+                                                else: #point['y'] == -1
+                                                    if not passed['x-1']:
+                                                        side = 'up'
+                                                    elif not passed['y-1']:
+                                                        side = 'left'
+                                            
+                                            if side == 'down':
+                                                ball.vy = abs(ball.vy)
+                                            elif side == 'left':
+                                                ball.vx = -abs(ball.vx)
+                                            elif side == 'up':
+                                                ball.vy = -abs(ball.vy)
+                                            elif side == 'right':
+                                                ball.vx = abs(ball.vx)
+                                    else:
+                                        vec = {'x' : (ball.x - (x + 0.5) * 100 / 6) * 6, 'y' : (ball.y - (y + 0.5) * 100 / 9) * 9}
+                                        rad = atan2(vec['y'], vec['x']) / pi
+                                        if rad >= 1 / 4 and rad < 3 / 4: #Downside
+                                            ball.vy = abs(ball.vy)
+                                        elif rad >= 3 / 4 or rad < - 3 / 4: #Leftside
+                                            ball.vx = -abs(ball.vx)
+                                        elif rad >= - 3 / 4 and rad < - 1 / 4: #Upside
+                                            ball.vy = -abs(ball.vy)
+                                        elif rad >= - 1 / 4 or rad < 1 / 4: #Rightside
+                                            ball.vx = abs(ball.vx)
+                                    if block.lastHitId != ball.id or block.lastHitTime + dt * 15 < t: 
+                                        block.num -= 1
+                                        self.Data['Log'].append(str(x)+"/"+str(y)+":"+str(block.num))
+                                        block.lastHitId = ball.id
+                                        block.lastHitTime = t
                             elif block.type == 'ball':
-                                if block.num <= 0:
-                                    self.Game['Map'][x][y] = None
-                                    self.Game['Number of Balls'] += 1
-                                    continue
-                #Remove Ball
-                
-                balls = self.Game['Shoot Balls']
-                self.Game['Shoot Balls'] = []
-                for ball in balls:
-                    if ball.y < 100 - self.Game['Ball Radius']:
-                        self.Game['Shoot Balls'].append(ball)
-                    elif not self.Game['Ground Ball']:
-                        self.Game['Ground Ball'] = True
-                        self.Game['New Shoot Position'] = { 'x' : ball.x, 'y': self.Game['Shoot Position']['y'] }
-                                    
-                #============================
+                                vec = { 'x' : ball.x - 100 / 6 * (x + 0.5), 'y' : ball.y - 100 / 9 * (y + 0.5) }
+                                length = sqrt(vec['x'] ** 2 + vec['y'] ** 2)
+                                if length <= self.Game['Ball Radius'] * 2 and block.num > 0:
+                                    block.num = 0
+                                    self.Data['Log'].append("!"+str(x)+"/"+str(y)+":"+str(block.num))
+                            #=========================================
+            #Remove Block
+            for y in range(self.Game['height']):
+                for x in range(self.Game['width']):
+                    block = self.Game['Map'][x][y]
+                    if block:
+                        if block.type == 'block':
+                            if block.num <= 0:
+                                self.Game['Map'][x][y] = None
+                                continue
+                        elif block.type == 'ball':
+                            if block.num <= 0:
+                                self.Game['Map'][x][y] = None
+                                self.Game['Number of Balls'] += 1
+                                continue
+            #Remove Ball
+            
+            balls = self.Game['Shoot Balls']
+            self.Game['Shoot Balls'] = []
+            for ball in balls:
+                if ball.y < 100 - self.Game['Ball Radius']:
+                    self.Game['Shoot Balls'].append(ball)
+                elif not self.Game['Ground Ball']:
+                    self.Game['Ground Ball'] = True
+                    self.Game['New Shoot Position'] = { 'x' : ball.x, 'y': self.Game['Shoot Position']['y'] }
+                                
+            #============================
         self.file.close()
 
 
