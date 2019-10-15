@@ -6,6 +6,8 @@ import numpy as np
 #import pandas as pd
 import os.path
 
+
+
 class SBBGame:
     def __init__(self):
         self.Window = {'width' : 576, 'height' : 800}
@@ -16,6 +18,23 @@ class SBBGame:
         self.attempt = 0
         self.last_score = 0
         self.guide_line = 0.5
+        self.file = None
+        
+        #use at DQN
+        self.action = None
+        self.dqn_state = None
+        self.dqn_data = None
+        
+    def callback_init(self, state):
+        self.dqn_state = state
+        while self.dqn_state != None: time.sleep(0.01)
+
+    def callback_result(self, data):
+        self.dqn_data = data
+        while self.dqn_data != None: time.sleep(0.01)
+    
+    def setACT(self, act):
+        self.action = act
         
     def start(self):
         self.main_loop = threading.Thread(target = self.run, args = (), daemon=True)
@@ -28,12 +47,13 @@ class SBBGame:
             if log[0] == '!': # hit Ball
                 x = int(log[1:log.find('/')])
                 y = int(log[log.find('/')+1:log.find(':')])
-                score += 0.1
+                score += 5
             else: #hit Block
                 x = int(log[:log.find('/')])
                 y = int(log[log.find('/')+1:log.find(':')])
                 t = int(log[log.find(':')+1:])
-                score += 1 * (1 + (y ** 2) / 25)
+                if t == 0:
+                    score += 1 * (1 + (y ** 2) / 25)
         died = 0
         
         for x in range(self.Game['width']):   
@@ -41,19 +61,8 @@ class SBBGame:
             if block:
                if block.type == 'block':
                     died = 1
-        
-        score /= data['Number of Balls']
 
         return {'score' : score, 'died' : died}
-
-    def callback_shootdegreed(self): # 0 ~ 128
-        return random.random() * 128
-
-    def callback_result(self, data):
-        pass
-
-    def callback_init(self, state):
-        pass
     
     def run(self):
         class Block:
@@ -72,7 +81,7 @@ class SBBGame:
                 self.id = id
         
         def action_Shoot(deg):
-            print('degreed is %12.6f' % deg)
+            
             rad = (deg * (pi - 0.3)) - pi + 0.15
             self.Game['Left Balls'] = self.Game['Number of Balls']
             self.Game['Shoot Radian'] = rad
@@ -88,15 +97,19 @@ class SBBGame:
 
             while True:
                 cursor = random.randrange(0, self.Game['width'])
-                if self.Game['Map'][cursor][0]:
-                    self.Game['Map'][cursor][0] = Block('ball', 1)
+                if self.Game['Map'][cursor][0] == None:
+                    self.Game['Map'][cursor][0] = Block('block', self.Game['Score'])
                     break
-                
+
+            left_ball = self.Game['Score'] - 1
             for x in range(self.Game['width']):
+                if left_ball == 0:
+                    break
                 block = self.Game['Map'][x][0]
                 if block == None:
                     if random.randint(0, 1) == 1:
-                        self.Game['Map'][x][0] = Block('block', self.Game['Score'])  
+                        self.Game['Map'][x][0] = Block('block', self.Game['Score'])
+                        left_ball -= 1
             
             
             #Get Down
@@ -116,7 +129,7 @@ class SBBGame:
                         self.Game['Number of Balls'] += 1
                         self.Game['Map'][x][self.Game['height'] - 1] = None
                     elif block.type == 'block':
-                        print('u r lose %d' % self.Game['Score'])
+                        print('Game Over - Score : %d' % self.Game['Score'])
                         self.attempt += 1
                         self.Game['State'] = 'lose'
                         initialize()
@@ -149,41 +162,9 @@ class SBBGame:
                         _.append(0)
                 state['type_map'].append(_)
                             
-            self.callback_init(self, (state))
+            self.callback_init((state))
             
             self.Game['State'] = 'shoot'
-
-            if self.model:
-                sample_rad = 0
-                score = -10000
-
-                while sample_rad < 1:
-                    data = []
-                    data.append(self.Game['Number of Balls'])
-                    data.append(self.Game['Shoot Position']['x'])
-                    data.append(self.Game['Shoot Position']['y'])
-                    data.append(sample_rad)
-        
-                    for y in range(self.Game['height']):
-                        for x in range(self.Game['width']):
-                            if self.Data['Map'][x][y].startswith('block:'):
-                                data.append(1.0)
-                                data.append(self.Game['Map'][x][y].num)
-                            else:
-                                data.append(0.0)
-                                data.append(1.0)
-
-                    data = data[:110]
-                    arr = np.array(data, dtype=np.float32)
-                    _score = self.model.predict([[arr]])[0][0]
-                    if _score > score:
-                        self.guide_line = sample_rad
-                        score = _score
-                        print(_score, sample_rad)
-                        
-                    sample_rad += 0.1
-
-                
 
         def action_CleanUp():                  
             self.Game['Shoot Position'] = self.Game['New Shoot Position']
@@ -206,7 +187,7 @@ class SBBGame:
                         elif block.type == 'ball':
                             self.Data['Map'][x][y] = 'ball'
                         else:
-                            print('Wrong')
+                            print('[SBBGame]Wrong type of block')
                             zero = 0
                             one = 1
                             error = one / zero
@@ -243,9 +224,9 @@ class SBBGame:
                         _.append(0)
                 state['type_map'].append(_)
                             
-            self.callback_result(self, (state,score, died))
+            self.callback_result((state, score, died))
             
-            if self.save_data:
+            if self.save_data and self.file:
                 self.file.write('\n')
                 self.file.write('%d, %12.6f,%12.6f,%12.6f,' % (died, score, self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
     
@@ -338,14 +319,7 @@ class SBBGame:
         self.Run = True
 
         self.Game['Ball Radius'] = 100 / self.Game['height'] * 0.185
-        self.file = open("1.csv", 'a')
-
-
-        if False and os.path.isfile('model.h5'):
-            self.model = tf.keras.models.load_model('model.h5')
-        else:
-            self.model = None
-        
+                
         initialize()    
 
         t = 0.0
@@ -428,7 +402,9 @@ class SBBGame:
             #else: # auto Shooting
             for _____ in range(8):
                 if self.Game['State'] == 'shoot' and (not self.user):
-                    action_Shoot(self.callback_shootdegreed(self))
+                    while self.action == None: time.sleep(0.1)
+                    action_Shoot(self.action)
+                    self.action = None
 
                 #=========================================
                 if self.Game['State'] == 'shooting':
@@ -599,25 +575,13 @@ class SBBGame:
                         self.Game['New Shoot Position'] = { 'x' : ball.x, 'y': self.Game['Shoot Position']['y'] }
                                     
                 #============================
-        self.file.close()
+        if self.file:
+            self.file.close()
 
 
 if __name__ == '__main__':
+    
     game = SBBGame()
     game.ui = False
-
-    def callback_initialize(self, state):
-        return
-
-    def shoot_degreed(self): # 0 ~ 128
-        return random.random() * 128
-
-    def callback_result(self, data):
-        return
-
-    game.callback_shootdegreed = shoot_degreed
-    game.callback_init = callback_initialize
-    game.callback_result = callback_result
-
 
     game.start()

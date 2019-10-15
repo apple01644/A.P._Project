@@ -1,38 +1,34 @@
 from Game import SBBGame
-import random
-
-
-game = SBBGame()
-game.ui = False
-game.user = False
+import random, time
 
 now_state = {}
 act = -1
 
 epsilon = 1
+time_step = 0
 
-EPSILON_DECREASE_FACTOR = 1e-4
-
-def callback_initialize(self, state):
-    now_state = state
-    return
-
-def shoot_degreed(self): # 0 ~ 128
-    if epsilon > random.random():
-        return random.random() * 128
-    else:
-        return act
-
-def callback_result(self, data):
-    if epsilon > 0:
-        epsilon -= EPSILON_DECREASE_FACTOR
-    elif epsilon == 0:
-        game.ui = True
-        epsilon = -1
-
-game.callback_shootdegreed = shoot_degreed
-game.callback_init = callback_initialize
-game.callback_result = callback_result
+EPSILON_DECREASE_PER_GAME = 1e-4
 
 
+
+game = SBBGame()
+#game.ui = False
+game.user = False
 game.start()
+
+for _ in range(100000):
+    while game.dqn_state == None: time.sleep(0.01)
+    state = game.dqn_state
+    
+    game.dqn_state = None
+    
+    if epsilon > random.random():
+        game.setACT(random.random())
+    else:
+        game.setACT(0.5)
+        
+    while game.dqn_data == None: time.sleep(0.01)
+    result = game.dqn_data
+    
+    game.dqn_data = None
+
