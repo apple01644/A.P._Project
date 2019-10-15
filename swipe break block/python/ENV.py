@@ -1,11 +1,13 @@
-
 import tensorflow as tf
 import numpy as np
 import pandas as pd
 import random
+import matplotlib.pyplot as plt
 
 from DQN import DQN
 from Game import SBBGame
+
+plt.ion()
 
 tf.app.flags.DEFINE_boolean("train", False,
                                 "학습모드. 게임화면에 보여주지 않습니다.")
@@ -60,12 +62,19 @@ def train():
 
     writer = tf.summary.FileWriter('logs', sess.graph)
     summary_merged = tf.summary.merge_all()
+    reward_mean = tf.reduce_mean(rewards)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    rl, = ax.plot([])
 
     brain.update_target_network()
 
     epsilon = 1.0
     time_step = 0
     total_reward_list = []
+    total_reward_all = []
     ui_on = False
 
     for episode in range(MAX_EPISODE):
@@ -73,7 +82,7 @@ def train():
         total_reward = 0
 
         state = game.dqn_state['num_map']
-        loc = 50
+        loc = 50 / 100
         brain.init_state(state, loc)
 
         while not terminal:
@@ -88,7 +97,7 @@ def train():
             game.setACT(action)
             while game.dqn_data == None: pass
             state, reward, terminal = game.dqn_data[0]['num_map'], game.dqn_data[1], game.dqn_data[2] != 0
-            loc = game.dqn_data[0]['pos']['x']
+            loc = game.dqn_data[0]['pos']['x'] / 100
             total_reward += reward
 
             game.dqn_data = None
@@ -103,27 +112,39 @@ def train():
 
             time_step += 1
 
+        
+
         print('게임횟수 : {0}, 점수: {1}'.format(episode + 1, total_reward))
 
         total_reward_list.append(total_reward)
+        total_reward_all.append(total_reward)
         
-        if episode > 600 and (not ui_on):
+        if episode > 100 and (not ui_on):
             game.user = True
             ui_on = True
         if episode % 10 == 0:
+            
             summary = sess.run(summary_merged,
                                 feed_dict={rewards: total_reward_list})
             writer.add_summary(summary, time_step)
             total_reward_list = []
+            rm = sess.run(reward_mean, feed_dict={rewards: total_reward_list})
+            
+            with open('logs/log.dat', "a") as logs:
+                logs.write(str(rm)+"/")
 
-        if episode % 100 == 0:
             saver.save(sess, 'model/dqn.ckpt', global_step=time_step)
+
+        plt.cla()
+        ax.plot(total_reward_all)
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
 def replay():
     print('시작')
+    game.user = True
     sess = tf.Session()
 
-    game = Game()
     brain = DQN(sess, SCREEN_WIDTH, SCREEN_HEIGHT, NUM_ACTION)
 
     saver = tf.train.Saver()
@@ -134,17 +155,24 @@ def replay():
         terminal = False
         total_reward = 0
 
-        state = game.reset()
-        brain.init_state(state)
+        state = game.dqn_state['num_map']
+        loc = 50 / 100
+        brain.init_state(state, loc)
 
 
         while not terminal:
             action = brain.get_action()
 
-            state, reward, terminal = game.action(action)
+            game.setACT(action)
+            while game.dqn_data == None: pass
+            state, reward, terminal = game.dqn_data[0]['num_map'], game.dqn_data[1], game.dqn_data[2] != 0
+            loc = game.dqn_data[0]['pos']['x'] / 100
             total_reward += reward
 
-            brain.remember(state, action, reward, terminal)
+            game.dqn_data = None
+
+            brain.remember(state, action, reward, terminal, loc)
+
 
         print('게임횟수 : {0}, 점수: {1}'.format(episode + 1, total_reward))
 
@@ -154,4 +182,3 @@ def main():
 
 if __name__ == '__main__':
     train()
-
