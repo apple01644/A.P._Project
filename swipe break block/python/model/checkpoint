@@ -1,6 +1,0 @@
-model_checkpoint_path: "dqn.ckpt-27917"
-all_model_checkpoint_paths: "dqn.ckpt-27466"
-all_model_checkpoint_paths: "dqn.ckpt-27567"
-all_model_checkpoint_paths: "dqn.ckpt-27696"
-all_model_checkpoint_paths: "dqn.ckpt-27802"
-all_model_checkpoint_paths: "dqn.ckpt-27917"

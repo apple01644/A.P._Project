@@ -10,19 +10,12 @@ class SBBGame:
     def __init__(self):
         self.Window = {'width' : 576, 'height' : 800}
         self.user = True
+        self.ui = True
         self.save_data = True
         self.Game = {'width' : 6, 'height' : 9}
         self.attempt = 0
         self.last_score = 0
         self.guide_line = 0.5
-
-        #use at DQN
-        self.action = None
-        self.dqn_state = None
-        self.dqn_data = None
-
-    def setACT(self, act):
-        self.action = act
         
     def start(self):
         self.main_loop = threading.Thread(target = self.run, args = (), daemon=True)
@@ -40,7 +33,7 @@ class SBBGame:
                 x = int(log[:log.find('/')])
                 y = int(log[log.find('/')+1:log.find(':')])
                 t = int(log[log.find(':')+1:])
-                score += 1 * (1 + y / 10)
+                score += 1 * (1 + (y ** 2) / 25)
         died = 0
         
         for x in range(self.Game['width']):   
@@ -252,14 +245,6 @@ class SBBGame:
                             
             self.callback_result(self, (state,score, died))
             
-            #file.write("Number of Balls,Shoot PositionX,Shoot PostionY,Shoot Degreed,")
-            #for y in range(self.Game['height']):
-            #    for x in range(self.Game['width']):
-            #        file.write("%d/%d is Block?," % (x, y))
-            #        file.write("%d/%d Number?," % (x, y))
-			
-            #print('%d,%12.6f,%12.6f,%12.6f,%12.6f' % (self.Data['Number of Balls'], self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y'], self.Data['Shoot Degreed'], score))
-            
             if self.save_data:
                 self.file.write('\n')
                 self.file.write('%d, %12.6f,%12.6f,%12.6f,' % (died, score, self.Data['Shoot Position']['x'], self.Data['Shoot Position']['y']))
@@ -327,28 +312,29 @@ class SBBGame:
                     return True
             return False
 
-        if self.user or True:
-            def draw_rect(surface, rgb, objT, worldT):
-                position = np.dot(np.array((objT[0], objT[1],1), dtype=np.float), worldT)
-                scale = np.array((objT[2] * worldT[0][0], objT[3] * worldT[1][1]), dtype=np.float)
-                pygame.draw.rect(surface, rgb, (position[0], position[1], scale[0], scale[1]))
-            def draw_line(surface, rgb, objTA, objTB, worldT, width = 1):
-                positionA = np.dot(np.array((objTA[0], objTA[1],1), dtype=np.float), worldT)
-                positionB = np.dot(np.array((objTB[0], objTB[1],1), dtype=np.float), worldT)                
-                pygame.draw.line(surface, rgb, (positionA[0], positionA[1]), (positionB[0], positionB[1]), width)                
-            def draw_circle(surface, rgb, objT, worldT):
-                position = np.dot(np.array((objT[0],objT[1],1), dtype=np.float), worldT)
-                scale = np.array((objT[2] * worldT[0][0], objT[2] * worldT[1][1]), dtype=np.float)
-                pygame.draw.circle(surface, rgb, (int(position[0]), int(position[1])), int(scale[0]))
-            def draw_text(surface, rgb, objT, worldT, text):
-                position = np.dot(np.array((objT[0], objT[1],1), dtype=np.float), worldT)
-                f = font.render(text, False, rgb)
-                r = f.get_rect()
-                surface.blit(f,(position[0] - r.w / 2,position[1] - r.h))
-            pygame.init()
-            pygame.font.init()
-            font = pygame.font.SysFont('Comic Sans MS', self.Window['height'] // 36)
-            surf = pygame.display.set_mode((self.Window['width'], self.Window['height']))
+        #if self.ui:
+        def draw_rect(surface, rgb, objT, worldT):
+            position = np.dot(np.array((objT[0], objT[1],1), dtype=np.float), worldT)
+            scale = np.array((objT[2] * worldT[0][0], objT[3] * worldT[1][1]), dtype=np.float)
+            pygame.draw.rect(surface, rgb, (position[0], position[1], scale[0], scale[1]))
+        def draw_line(surface, rgb, objTA, objTB, worldT, width = 1):
+            positionA = np.dot(np.array((objTA[0], objTA[1],1), dtype=np.float), worldT)
+            positionB = np.dot(np.array((objTB[0], objTB[1],1), dtype=np.float), worldT)                
+            pygame.draw.line(surface, rgb, (positionA[0], positionA[1]), (positionB[0], positionB[1]), width)                
+        def draw_circle(surface, rgb, objT, worldT):
+            position = np.dot(np.array((objT[0],objT[1],1), dtype=np.float), worldT)
+            scale = np.array((objT[2] * worldT[0][0], objT[2] * worldT[1][1]), dtype=np.float)
+            pygame.draw.circle(surface, rgb, (int(position[0]), int(position[1])), int(scale[0]))
+        def draw_text(surface, rgb, objT, worldT, text):
+            position = np.dot(np.array((objT[0], objT[1],1), dtype=np.float), worldT)
+            f = font.render(text, False, rgb)
+            r = f.get_rect()
+            surface.blit(f,(position[0] - r.w / 2,position[1] - r.h))
+                
+        pygame.init()
+        pygame.font.init()
+        font = pygame.font.SysFont('Comic Sans MS', self.Window['height'] // 36)
+        surf = pygame.display.set_mode((self.Window['width'], self.Window['height']))
         self.Run = True
 
         self.Game['Ball Radius'] = 100 / self.Game['height'] * 0.185
@@ -364,9 +350,9 @@ class SBBGame:
 
         t = 0.0
         while self.Run:            
-            dt = 0.2 * 2
+            dt = 0.1
             t += 1
-            if self.user:
+            if self.ui:
                 trans = np.array(((1,0,0), (0,1,0), (0,0,1)), dtype=np.float)
                 trans[2][1] = (self.Window['height'] - self.Window['width']) / 2
                 trans[0][0] = self.Window['width'] / 100
@@ -378,7 +364,7 @@ class SBBGame:
                         self.End = 'End by User'
                     elif e.type == pygame.locals.MOUSEBUTTONUP:
                         if e.button == 1:
-                            if self.Game['State'] == 'shoot':
+                            if self.Game['State'] == 'shoot' and self.user:
                                 position = np.dot(np.array((e.pos[0], e.pos[1],1), dtype=np.float), np.linalg.inv(trans))
                                 if 0 <= position[0] <= 100 and 0 <= position[1] <= 100:
                                     vx = position[0] - self.Game['Shoot Position']['x']
@@ -433,12 +419,16 @@ class SBBGame:
 
     
                 pygame.display.flip()
+            else:
+                for e in pygame.event.get():
+                    if e.type == pygame.locals.QUIT:
+                        self.Run = False
+                        self.End = 'End by User'
+                pygame.display.flip()
             #else: # auto Shooting
-            for _____ in range(5):
-                if self.Game['State'] == 'shoot':
-                    while self.action == None: pass
-                    action_Shoot(self.action / 128.0)
-                    self.action = None
+            for _____ in range(8):
+                if self.Game['State'] == 'shoot' and (not self.user):
+                    action_Shoot(self.callback_shootdegreed(self))
 
                 #=========================================
                 if self.Game['State'] == 'shooting':
@@ -614,17 +604,15 @@ class SBBGame:
 
 if __name__ == '__main__':
     game = SBBGame()
-    game.user = False
+    game.ui = False
 
     def callback_initialize(self, state):
-        self.dqn_state = state
         return
 
     def shoot_degreed(self): # 0 ~ 128
         return random.random() * 128
 
     def callback_result(self, data):
-        self.dqn_data = data
         return
 
     game.callback_shootdegreed = shoot_degreed
@@ -633,17 +621,3 @@ if __name__ == '__main__':
 
 
     game.start()
-    time.sleep(3)
-    print("!@#$#$%^&^%$#$%^&*")
-    print(game.dqn_state)
-    print(game.dqn_data)
-    input()
-
-    last_att = 0
-    while game.attempt < 1000:
-        time.sleep(1)
-        if game.attempt > last_att + 100:
-            last_att += 100
-            print('======== %6d ========' % last_att)
-            
-    game.Run = False
