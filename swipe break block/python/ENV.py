@@ -69,12 +69,19 @@ def train():
 
     rl, = ax.plot([])
 
+    reward_mean = tf.reduce_mean(rewards)
+    logs = open('logs/log.dat', "a")
+
     brain.update_target_network()
 
     epsilon = 1.0
     time_step = 0
     total_reward_list = []
+<<<<<<< HEAD
     total_reward_all = []
+=======
+    total_reward_mean = []
+>>>>>>> 73d437d4e1ce603d659a04e740062043c474584a
     ui_on = False
 
     for episode in range(MAX_EPISODE):
@@ -123,9 +130,18 @@ def train():
             game.user = True
             ui_on = True
         if episode % 10 == 0:
+<<<<<<< HEAD
             
+=======
+            plt.clf()
+>>>>>>> 73d437d4e1ce603d659a04e740062043c474584a
             summary = sess.run(summary_merged,
                                 feed_dict={rewards: total_reward_list})
+            rm = sess.run(reward_mean,
+                                feed_dict={rewards: total_reward_list})
+            total_reward_mean.append(rm)
+            plt.plot(total_reward_mean)
+            plt.draw()
             writer.add_summary(summary, time_step)
             total_reward_list = []
             rm = sess.run(reward_mean, feed_dict={rewards: total_reward_list})
@@ -133,6 +149,12 @@ def train():
             with open('logs/log.dat', "a") as logs:
                 logs.write(str(rm)+"/")
 
+<<<<<<< HEAD
+=======
+            logs.write(str(rm)+"/")
+
+        if episode % 100 == 0:
+>>>>>>> 73d437d4e1ce603d659a04e740062043c474584a
             saver.save(sess, 'model/dqn.ckpt', global_step=time_step)
 
         plt.cla()
