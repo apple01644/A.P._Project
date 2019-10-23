@@ -47,13 +47,13 @@ class SBBGame:
             if log[0] == '!': # hit Ball
                 x = int(log[1:log.find('/')])
                 y = int(log[log.find('/')+1:log.find(':')])
-                score += 5
+                score += 0.75
             else: #hit Block
                 x = int(log[:log.find('/')])
                 y = int(log[log.find('/')+1:log.find(':')])
                 t = int(log[log.find(':')+1:])
                 if t == 0:
-                    score += 1 * (1 + (y ** 2) / 25)
+                    score += 1 * (y / 9) / self.Data['Number of Balls']
         died = 0
         
         for x in range(self.Game['width']):   
@@ -101,7 +101,7 @@ class SBBGame:
                     self.Game['Map'][cursor][0] = Block('block', self.Game['Score'])
                     break
 
-            left_ball = self.Game['Score'] - 1
+            left_ball = self.Game['Score'] // 10 + 1
             for x in range(self.Game['width']):
                 if left_ball == 0:
                     break
@@ -137,6 +137,7 @@ class SBBGame:
             assess_begin()
 
             state = {}
+            state['x'] = self.Data['Shoot Position']['x'] / 100
             state['num_map'] = []
             state['type_map'] = []
 
@@ -145,8 +146,8 @@ class SBBGame:
                 for x in range(self.Game['width']):
                     if self.Data['Map'][x][y].startswith('block:'):
                         _.append(int(self.Data['Map'][x][y][self.Data['Map'][x][y].find(':') + 1:]) / self.Data['Number of Balls'])
-                    elif self.Data['Map'][x][y] == 'ball':
-                        _.append(5)
+                    #elif self.Data['Map'][x][y] == 'ball':
+                    #    _.append(1)
                     else:
                         _.append(0)
                 state['num_map'].append(_)
@@ -582,6 +583,6 @@ class SBBGame:
 if __name__ == '__main__':
     
     game = SBBGame()
-    game.ui = False
+    #game.ui = False
 
     game.start()
