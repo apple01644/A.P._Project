@@ -15,8 +15,6 @@ class DDQN_Model:
 
         model.fit([[0 for i in range(237)]], [[1]], epochs=1, verbose=0)
 
-    def 
-
 if __name__ == '__main__':
     DDQN_Model()
     print('Done')

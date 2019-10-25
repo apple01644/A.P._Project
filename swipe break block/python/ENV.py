@@ -21,12 +21,16 @@ game.start()
 for _ in range(EPOCH):
     while game.dqn_state == None: time.sleep(0.1)
     state = game.dqn_state
+
+    print(state)
+    input('press to countinue')
+    
     game.dqn_state = None
     
     #set action from state
     game.guide_line = act
     if epsilon > random.random():
-        game.setACT(random.random())
+        game.setACT(random.randint(0, 16) / 16)
     else:
         game.setACT(act)
         
