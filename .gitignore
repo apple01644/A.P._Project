@@ -332,3 +332,5 @@ ASALocalRun/
 swipe break block/python/model/dqn.ckpt-1513.data-00000-of-00001
 *.data-00000-of-00001
 *.DESKTOP-AIPROJ
+/swipe break block/cpp/opencv_world411d.dll
+/swipe break block/cpp/opencv_world411.dll

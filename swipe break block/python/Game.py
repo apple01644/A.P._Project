@@ -622,7 +622,7 @@ if __name__ == '__main__':
                         saved_map['type_map'][y][x] = 0
                         saved_map['num_map'][y][x] = 0
 
-                        if custom_score + 1 - y > 0 and y < 8:
+                        if custom_score + 1 - y > 0 and y > 0 and y < 8:
                             if random.random() < 0.3:
                                 saved_map['type_map'][y][x] = 1
                                 if y == 1:
