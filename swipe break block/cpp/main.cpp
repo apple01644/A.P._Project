@@ -15,6 +15,12 @@
 
 using namespace std;
 
+mt19937_64 mt = mt19937_64(time(nullptr));
+const unsigned short&& random()
+{
+	return mt();
+}
+
 enum class BlockType {
 	None, Block, Ball
 };
@@ -134,8 +140,11 @@ public:
 	const float ball_rad = 100.f / Game_Height * 0.185f;
 	const float Game_Y = 100 - ball_rad;
 
-	mt19937_64 mt = mt19937_64(time(nullptr));
 	std::vector<Log> logs;
+
+	cv::HersheyFonts font_face = cv::HersheyFonts::FONT_HERSHEY_DUPLEX;
+	double font_size = 0.0025 * 480;
+	int font_thick = 3;
 
 	SBBGame() {
 		initialize();
@@ -143,12 +152,12 @@ public:
 
 	void action_prepare()
 	{
-		int cursor = mt() % Game_Width;
+		int cursor = random() % Game_Width;
 		Game_Map[cursor][0] = Block(BlockType::Ball, 1);
 
 		while (true)
 		{
-			cursor = mt() % Game_Width;
+			cursor = random() % Game_Width;
 			if (Game_Map[cursor][0].type == BlockType::None)
 			{
 				Game_Map[cursor][0] = Block(BlockType::Block, Game_Score);
@@ -162,7 +171,7 @@ public:
 			Block& block = Game_Map[x][0];
 			if (block.type == BlockType::None)
 			{
-				if (mt() % 100 < 50)
+				if (random() % 100 < 50)
 				{
 					Game_Map[x][0] = Block(BlockType::Block, Game_Score);
 					if (--left_ball == 0) break;
@@ -516,7 +525,12 @@ public:
 				switch (Game_Map[x][y].type)
 				{
 				case BlockType::Block:
-					cv::Mat(mat, cv::Rect(480 * x / 6, 480 * y / 9, 480 / 6, 480 / 9)) = cv::Scalar(0, 127.f - 127.f * Game_Map[x][y].num / Game_Score, 255.f);
+					{ 
+						cv::Mat(mat, cv::Rect(480 * x / 6, 480 * y / 9, 480 / 6, 480 / 9)) = cv::Scalar(0, 127.f - 127.f * Game_Map[x][y].num / Game_Score, 255.f);
+						const cv::String str = to_string(Game_Map[x][y].num);
+						const cv::Size& size = cv::getTextSize(str, font_face, font_size, font_thick, nullptr);
+						cv::putText(mat, str, cv::Point(480 * (x + 0.5f) / 6 - size.width / 2, 480 * (y + 0.5f) / 9 + size.height / 2), font_face, font_size, cv::Scalar(255, 255, 255), font_thick);
+					}
 					break;
 				case BlockType::Ball:
 					cv::circle(mat, cv::Point(480 * (x + 0.5f) / 6, 480 * (y + 0.5f) / 9), ball_rad * 480.f / 100, cv::Scalar(0, 255, 0), cv::FILLED);
@@ -529,6 +543,11 @@ public:
 		{
 			cv::circle(mat, cv::Point(480 * ball.x / 100, 480 * ball.y / 100), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
 		}
+
+		const cv::String str = "x" + to_string((Game_State == State::Shooting) ? Game_LeftBalls : Game_Balls);
+		const cv::Size& size = cv::getTextSize(str, font_face, font_size / 2, font_thick / 2, nullptr);
+		cv::putText(mat, str, cv::Point(Game_X * 480 / 100, 480 * 8.f / 9), font_face, font_size / 2, cv::Scalar(255, 255, 0), font_thick / 2);
+		cv::circle(mat, cv::Point(Game_X * 480 / 100, 480 - ball_rad), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
 
 		cv::imshow("mainWindow", mat);
 	}
@@ -613,7 +632,7 @@ public:
 			{
 				if (data.type_map[x][y] == 1.f)
 				{
-					Game_Map[x][y] = Block(BlockType::Block, data.num_map[x][y] * balls);
+					Game_Map[x][y] = Block(BlockType::Block, ceil(data.num_map[x][y] * balls));
 				}
 				else if (data.type_map[x][y] == -1.f)
 				{
@@ -653,7 +672,6 @@ void savedata(const GameAbstractData& data, int balls, int action, float score, 
 
 tuple<GameAbstractData, int, int> fabric_data()
 {
-	static mt19937_64 mt = mt19937_64(time(nullptr));
 	GameAbstractData data;
 
 	//Clear
@@ -667,20 +685,20 @@ tuple<GameAbstractData, int, int> fabric_data()
 	}
 
 	//Set Environment
-	int now_score = mt() % 100 + 1;
+	int now_score = random() % 100 + 1;
 	int now_ball = now_score;
 	float proportion_block = 50;
 
 	//Set Header
-	int cursor = mt() % Game_Width;
+	int cursor = random() % Game_Width;
 	data.type_map[cursor][1] = -1.f;
 
 	for (int x = 0; x < Game_Width; ++x)
 	{
-		if (data.type_map[x][1] == 0.f && mt() % 100 < proportion_block)
+		if (data.type_map[x][1] == 0.f && random() % 100 < proportion_block)
 		{
 			data.type_map[x][1] = 1.f;
-			data.num_map[x][1] = now_score;
+			data.num_map[x][1] = 1.f;
 		}
 	}
 
@@ -688,32 +706,33 @@ tuple<GameAbstractData, int, int> fabric_data()
 	{
 		if (now_ball > 1) {
 			--now_ball;
-			cursor = mt() % Game_Width;
+			cursor = random() % Game_Width;
 			data.type_map[cursor][y] = -1.f;
 		}
 
 		proportion_block = 50 - (y - 2) * 9;
+		const int num = now_score - y + 1;
 		if (now_score >= y)
 		{
 			for (int x = 0; x < Game_Width; ++x)
 			{
-				if (data.type_map[x][y] == 0.f && mt() % 100 < proportion_block)
+				if (data.type_map[x][y] == 0.f && random() % 100 < proportion_block)
 				{
 					data.type_map[x][y] = 1.f;
-					data.num_map[x][y] = mt() % (now_score - y + 1) + 1;
+					data.num_map[x][y] = (random() % (now_score - y + 1) + 1.f) / now_ball;
 				}
 			}
 		}
 	}
 
-	data.shoot_x = (mt() % 10000) / 100.f;
+	data.shoot_x = (random() % 10000) / 100.f;
 
 	return make_tuple(data, now_ball, now_score);
 }
 
 int main()
 {
-	cv::Mat wind(480, 480, CV_8UC3);
+	cv::Mat wind(489, 489, CV_8UC3);
 	SetPriorityClass(GetCurrentProcess(), 0x100);
 
 	SBBGame game;
@@ -796,11 +815,11 @@ int main()
 			break;
 		}
 		game.loop();
-		/*if (game.Game_t % 20 == 0)
+		if (game.Game_t % 20 == 0)
 		{
 			game.draw(wind);
 			cv::waitKey(1);
-		}*/
+		}
 
 	}
 
