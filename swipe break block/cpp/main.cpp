@@ -861,8 +861,8 @@ float getBestDegreed(const GameAbstractData& data, int balls, int score)
 	float best_score = 0;
 
 	float score_per_balls = score / (float)balls;
-	balls = 8;
-	score = score_per_balls * balls;
+	balls = 32;
+	score =  round(score_per_balls * balls);
 
 	Game.custom_initialize(data, balls, score);
 	while (Game.Flag_run)
