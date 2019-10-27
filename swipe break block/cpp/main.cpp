@@ -6,6 +6,9 @@
 #include <time.h>
 #include <random>
 
+#include <thread>
+#include <future>
+
 #include <opencv2/opencv.hpp>
 
 #define _AMD64_
@@ -127,7 +130,7 @@ struct GameAbstractData {
 };
 
 struct Effect {
-	float x, y, vx, vy;
+	float x, y, size, rad;
 	DirectX::XMFLOAT3 color;
 };
 
@@ -148,6 +151,7 @@ public:
 	bool Flag_user = false;
 	bool Flag_custom_state = false;
 	bool Flag_run = true;
+	bool Flag_effect = true;
 
 	const float dt = 0.1f;
 	const float ball_rad = 100.f / Game_Height * 0.185f;
@@ -159,8 +163,15 @@ public:
 	double font_size = 0.0025 * 480;
 	int font_thick = 3;
 
-	const float display_DeltaY = (640 - 480) / 2;
-	const float display_Size = 480;
+	const float display_DeltaY = (1048 - 960) / 2;
+	const float display_Size = 960;
+
+	const DirectX::XMFLOAT3 highest_color = { 230.f,   5.f,   0.f };
+	const DirectX::XMFLOAT3  lowest_color = { 253.f, 204.f,  77.f };
+	const DirectX::XMFLOAT3  hitted_color = { 255.f, 255.f, 255.f };
+
+	cv::String window_name;
+	int window_x, window_y;
 
 	std::list<Effect> Game_effects;
 	
@@ -184,13 +195,13 @@ public:
 			}
 		}
 
-		int left_ball = Game_Score / 5 + 3;
+		int left_ball = 5;
 		for (int x = 0; x < Game_Width; ++x)
 		{
 			Block& block = Game_Map[x][0];
 			if (block.type == BlockType::None)
 			{
-				if (random() % 100 < 50)
+				if (random() % 100 < 50 + Game_Score)
 				{
 					Game_Map[x][0] = Block(BlockType::Block, Game_Score);
 					if (--left_ball == 0) break;
@@ -207,6 +218,8 @@ public:
 				Block& block = Game_Map[x][y];
 				if (block.type != BlockType::None)
 				{
+					block.lastHitId = -1;
+					block.lastHitTime = 0;
 					Game_Map[x][y + 1] = block;
 					block = Block(BlockType::None, 0);
 				}
@@ -472,12 +485,31 @@ public:
 									ball.vx = abs(ball.vx);
 							}
 
-							if (block.lastHitId != ball.id || block.lastHitTime + dt * 15 < Game_t)
+							if ((block.lastHitId != ball.id || block.lastHitTime + 1.5f / dt < Game_t) && block.num > 0)
 							{
 								--block.num;
 								logs.push_back(Log{ x, y, block.num, BlockType::Block });
 								block.lastHitId = ball.id;
 								block.lastHitTime = Game_t;
+								if (block.num == 0)
+								{
+									if (Flag_effect)
+									{
+										DirectX::XMFLOAT3 color = blend(highest_color, lowest_color, Game_Map[x][y].num / (float)Game_Score);
+										for (int _ = 0; _ < 30; ++_)
+										{
+											float rad = (_ / 15.f) * DirectX::XM_2PI;
+											Game_effects.push_back(
+												Effect{
+													100 / 6.f * (x + 0.5f),
+													100 / 9.f * (y + 0.5f),
+													2.f,
+													rad,
+													color
+												});
+										}
+									}
+								}
 							}
 						}
 						break;
@@ -488,6 +520,22 @@ public:
 							{
 								block.num = 0;
 								logs.push_back(Log{x, y, 0, BlockType::Ball});
+								if (Flag_effect)
+								{
+									for (int _ = 0; _ < 30; ++_)
+									{
+										float rad = (_ / 15.f) * DirectX::XM_2PI;
+										DirectX::XMFLOAT3 color = { 0, 255, 0 };
+										Game_effects.push_back(
+											Effect{
+												100 / 6.f * (x + 0.5f),
+												100 / 9.f * (y + 0.5f),
+												2.f,
+												rad,
+												color
+											});
+									}
+								}
 							}
 						}
 						break;
@@ -535,13 +583,38 @@ public:
 	}
 
 	void draw(const cv::Mat& _mat) {
-		const static DirectX::XMFLOAT3 highest_color = { 230.f,   5.f,   0.f };
-		const static DirectX::XMFLOAT3  lowest_color = { 253.f, 204.f,  77.f };
-		const static DirectX::XMFLOAT3  hitted_color = { 255.f, 255.f, 255.f };
-
 		cv::Mat mat = _mat.clone();
 		mat = cv::Scalar(200, 200, 200);
 		cv::Mat(mat, cv::Rect(0, display_DeltaY, display_Size, display_Size)) = cv::Scalar(255, 255, 255);
+
+		if (Flag_effect && Game_effects.size())
+		{
+			std::list<Effect> effects;
+			effects.swap(Game_effects);
+
+			for (Effect& effect : effects)
+			{
+				if (effect.x - effect.size < 100 &&
+					effect.y - effect.size < 100 &&
+					effect.x + effect.size > 0 &&
+					effect.y + effect.size > 0 &&
+					effect.size > 0)
+				{
+					cv::rectangle(mat, cv::Rect((effect.x - effect.size / 2) / 100 * display_Size, (effect.y - effect.size / 2) / 100 * display_Size + display_DeltaY, effect.size / 100 * display_Size, effect.size / 100 * display_Size), cv::Scalar(effect.color.z, effect.color.y, effect.color.x), cv::FILLED, cv::LINE_AA);
+
+					effect.x += cosf(effect.rad);
+					effect.y += sinf(effect.rad);
+
+					effect.rad += 0.06f;
+					effect.size -= 0.09f;
+					effect.color.x += 0.03f;
+					effect.color.y += 0.03f;
+					effect.color.z += 0.03f;
+					
+					Game_effects.push_back(effect);
+				}
+			}
+		}
 
 		for (int x = 0; x < Game_Width; ++x)
 		{
@@ -551,7 +624,7 @@ public:
 				{
 				case BlockType::Block:
 					{ 
-					DirectX::XMFLOAT3 color = blend(highest_color, lowest_color, Game_Map[x][y].num / (float)Game_Score);
+						DirectX::XMFLOAT3 color = blend(highest_color, lowest_color, Game_Map[x][y].num / (float)Game_Score);
 						if (Game_t - Game_Map[x][y].lastHitTime < 60)
 						{
 							color = blend(color, hitted_color, (Game_t - Game_Map[x][y].lastHitTime) / 120.f + 0.5f);							
@@ -572,26 +645,19 @@ public:
 
 		for (const Ball& ball : Game_shootBalls)
 		{
-			cv::circle(mat, cv::Point(display_Size * ball.x / 100, display_Size * ball.y / 100 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(255, 255, 0), cv::FILLED, cv::LINE_AA);
+			cv::circle(mat, cv::Point(display_Size * ball.x / 100, display_Size * ball.y / 100 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(243, 167, 94), cv::FILLED, cv::LINE_AA);
 		}
-
+		
 		if (Game_State != State::Shooting || Game_LeftBalls > 0)
 		{
 			const cv::String str = "x" + to_string((Game_State == State::Shooting) ? Game_LeftBalls : Game_Balls);
-			const cv::Size& size = cv::getTextSize(str, font_face, font_size / 2, font_thick / 2, nullptr);
-			cv::putText(mat, str, cv::Point(Game_X * display_Size / 100 - size.width / 2, display_Size * 8.5f / 9 + size.height / 2 + display_DeltaY), font_face, font_size / 2, cv::Scalar(255, 255, 0), font_thick / 2);
-			cv::circle(mat, cv::Point(Game_X * display_Size / 100, display_Size - ball_rad * display_Size / 100 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(255, 255, 0), cv::FILLED, cv::LINE_AA);
+			const cv::Size& size = cv::getTextSize(str, font_face, font_size * 0.67f, font_thick * 0.67f, nullptr);
+			cv::putText(mat, str, cv::Point(Game_X * display_Size / 100 - size.width / 2, display_Size * 8.5f / 9 + size.height / 2 + display_DeltaY), font_face, font_size * 0.67f, cv::Scalar(243, 167, 94), font_thick * 0.67f);
+			cv::circle(mat, cv::Point(Game_X * display_Size / 100, display_Size - ball_rad * display_Size / 100 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(243, 167, 94), cv::FILLED, cv::LINE_AA);
 		}
 
-		std::list<Effect> effects;
-		effects.swap(Game_effects);
-
-		for (Effect& effect : effects)
-		{
-			if (effect)
-		}
-
-		cv::imshow("mainWindow", mat);
+		cv::imshow(window_name, mat);
+		cv::moveWindow(window_name, window_x, window_y);
 	}
 
 	tuple<float, bool> assess_func(int balls) {
@@ -785,33 +851,128 @@ tuple<GameAbstractData, int, int> fabric_data()
 	return make_tuple(data, now_ball, now_score);
 }
 
-int main()
+float getBestDegreed(const GameAbstractData& data, int balls, int score)
 {
-	//Height, Width
-	cv::Mat wind(640, 480, CV_8UC3);
-	SetPriorityClass(GetCurrentProcess(), 0x100);
+	SBBGame Game;
+	const static int precision = 128;
+	int deg = 0;
+	int best_deg = precision / 2;
+	float best_score = 0;
 
-	SBBGame game;
-	
-	while (game.Flag_run)
+	float score_per_balls = score / (float)balls;
+	balls = 8;
+	score = score_per_balls * balls;
+
+	Game.custom_initialize(data, balls, score);
+	while (Game.Flag_run)
 	{
-		switch (game.Game_State)
+		switch (Game.Game_State)
 		{
 		case State::Shoot:
-			game.action_shoot((random() % 256) / 256.f);
+			Game.action_shoot(deg / (float)precision);
 			break;
 		case State::Result:
-			game.Game_State = State::Prepare;
+			{
+				auto [score, died] = Game.assess_func(balls);
+				if (died == 0)
+				{
+					//cout << deg << " " << score << endl;
+					if (best_score < score)
+					{
+						best_score = score;
+						best_deg = deg;
+					}
+				}
+			}
+			if (deg == precision)
+			{
+				//cout << best_score << endl;
+				return best_deg / (float)precision;
+			}
+			else
+			{
+				++deg;
+				Game.custom_initialize(data, balls, score);
+				Game.log_begin();
+			}
 			break;
 		}
-		game.loop();
-		if (game.Game_t % 10 == 0)
+		Game.loop();
+	}
+
+}
+
+void runAIOnly()
+{
+	//Height, Width
+	cv::Mat wind1(1048, 960, CV_8UC3);
+	SetPriorityClass(GetCurrentProcess(), 0x100);
+
+	SBBGame gameAI;
+	gameAI.window_name = "AI";
+	gameAI.window_x = (1920 - 960) / 2;
+	gameAI.window_y = 0;
+
+	while (gameAI.Flag_run)
+	{
+		switch (gameAI.Game_State)
 		{
-			game.draw(wind);
+		case State::Shoot:
+			gameAI.action_shoot(getBestDegreed(gameAI.exportData(), gameAI.Game_Balls, gameAI.Game_Score));
+			break;
+		case State::Result:
+			gameAI.Game_State = State::Prepare;
+			gameAI.Game_X = gameAI.Game_NX;
+			break;
+		}
+		gameAI.loop();
+		if (gameAI.Game_t % 40 == 0)
+		{
+			gameAI.draw(wind1);
 			cv::waitKey(1);
 		}
 
 	}
+}
+
+int main()
+{
+	runAIOnly();
+	//Height, Width
+	/*cv::Mat wind1(1048, 960, CV_8UC3);
+	cv::Mat wind2(1048, 960, CV_8UC3);
+	SetPriorityClass(GetCurrentProcess(), 0x100);
+
+	SBBGame gameAI, gamePlayer;
+	gameAI.window_name = "AI";
+	gameAI.window_x = 0;
+	gameAI.window_y = 0;
+
+	gamePlayer.window_name = "Player";
+	gamePlayer.window_x = 960;
+	gamePlayer.window_y = 0;
+	gamePlayer.draw(wind2);
+	
+	while (gameAI.Flag_run)
+	{
+		switch (gameAI.Game_State)
+		{
+		case State::Shoot:
+			gameAI.action_shoot(getBestDegreed(gameAI.exportData(), gameAI.Game_Balls, gameAI.Game_Score));
+			break;
+		case State::Result:
+			gameAI.Game_State = State::Prepare;
+			gameAI.Game_X = gameAI.Game_NX;
+			break;
+		}
+		gameAI.loop();
+		if (gameAI.Game_t % 40 == 0)
+		{
+			gameAI.draw(wind1);
+			cv::waitKey(1);
+		}
+
+	}*/
 
 	return 0;
 }
