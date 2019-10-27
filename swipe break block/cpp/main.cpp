@@ -108,6 +108,15 @@ bool Collision_Rect_Circle(const Rect& rect, const Circle& circle)
 	}
 }
 
+DirectX::XMFLOAT3 blend(const DirectX::XMFLOAT3 highColor, const DirectX::XMFLOAT3 lowColor, float value)
+{
+	return DirectX::XMFLOAT3{
+		highColor.x* value + lowColor.x * (1 - value),
+		highColor.y* value + lowColor.y * (1 - value),
+		highColor.z* value + lowColor.z * (1 - value)
+	};
+}
+
 const static int Game_Width = 6;
 const static int Game_Height = 9;
 
@@ -115,7 +124,11 @@ struct GameAbstractData {
 	float shoot_x;
 	float type_map[Game_Width][Game_Height];
 	float num_map[Game_Width][Game_Height];
+};
 
+struct Effect {
+	float x, y, vx, vy;
+	DirectX::XMFLOAT3 color;
 };
 
 class SBBGame {
@@ -140,11 +153,17 @@ public:
 	const float ball_rad = 100.f / Game_Height * 0.185f;
 	const float Game_Y = 100 - ball_rad;
 
-	std::vector<Log> logs;
+	std::list<Log> logs;
 
 	cv::HersheyFonts font_face = cv::HersheyFonts::FONT_HERSHEY_DUPLEX;
 	double font_size = 0.0025 * 480;
 	int font_thick = 3;
+
+	const float display_DeltaY = (640 - 480) / 2;
+	const float display_Size = 480;
+
+	std::list<Effect> Game_effects;
+	
 
 	SBBGame() {
 		initialize();
@@ -516,8 +535,14 @@ public:
 	}
 
 	void draw(const cv::Mat& _mat) {
+		const static DirectX::XMFLOAT3 highest_color = { 230.f,   5.f,   0.f };
+		const static DirectX::XMFLOAT3  lowest_color = { 253.f, 204.f,  77.f };
+		const static DirectX::XMFLOAT3  hitted_color = { 255.f, 255.f, 255.f };
+
 		cv::Mat mat = _mat.clone();
-		mat = cv::Scalar(255, 255, 255);
+		mat = cv::Scalar(200, 200, 200);
+		cv::Mat(mat, cv::Rect(0, display_DeltaY, display_Size, display_Size)) = cv::Scalar(255, 255, 255);
+
 		for (int x = 0; x < Game_Width; ++x)
 		{
 			for (int y = 0; y < Game_Height; ++y)
@@ -526,14 +551,20 @@ public:
 				{
 				case BlockType::Block:
 					{ 
-						cv::Mat(mat, cv::Rect(480 * x / 6, 480 * y / 9, 480 / 6, 480 / 9)) = cv::Scalar(0, 127.f - 127.f * Game_Map[x][y].num / Game_Score, 255.f);
+					DirectX::XMFLOAT3 color = blend(highest_color, lowest_color, Game_Map[x][y].num / (float)Game_Score);
+						if (Game_t - Game_Map[x][y].lastHitTime < 60)
+						{
+							color = blend(color, hitted_color, (Game_t - Game_Map[x][y].lastHitTime) / 120.f + 0.5f);							
+						}
+						cv::Mat(mat, cv::Rect(display_Size * x / 6.f, display_Size * y / 9.f + display_DeltaY, display_Size / 6.f - 1, display_Size / 9.f - 1)) = cv::Scalar(color.z, color.y, color.x);
 						const cv::String str = to_string(Game_Map[x][y].num);
 						const cv::Size& size = cv::getTextSize(str, font_face, font_size, font_thick, nullptr);
-						cv::putText(mat, str, cv::Point(480 * (x + 0.5f) / 6 - size.width / 2, 480 * (y + 0.5f) / 9 + size.height / 2), font_face, font_size, cv::Scalar(255, 255, 255), font_thick);
+						cv::putText(mat, str, cv::Point(display_Size * (x + 0.5f) / 6 - size.width / 2, display_Size * (y + 0.5f) / 9 + size.height / 2 + display_DeltaY), font_face, font_size, cv::Scalar(255, 255, 255), font_thick);
 					}
 					break;
 				case BlockType::Ball:
-					cv::circle(mat, cv::Point(480 * (x + 0.5f) / 6, 480 * (y + 0.5f) / 9), ball_rad * 480.f / 100, cv::Scalar(0, 255, 0), cv::FILLED);
+					cv::circle(mat, cv::Point(display_Size * (x + 0.5f) / 6, display_Size * (y + 0.5f) / 9 + display_DeltaY), (ball_rad + 0.625f + 0.3f * (sinf(Game_t / 60.f) / 2 + 0.5f)) * display_Size / 100, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
+					cv::circle(mat, cv::Point(display_Size * (x + 0.5f) / 6, display_Size * (y + 0.5f) / 9 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(0, 255, 0), cv::FILLED, cv::LINE_AA);
 					break;
 				}
 			}
@@ -541,13 +572,24 @@ public:
 
 		for (const Ball& ball : Game_shootBalls)
 		{
-			cv::circle(mat, cv::Point(480 * ball.x / 100, 480 * ball.y / 100), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
+			cv::circle(mat, cv::Point(display_Size * ball.x / 100, display_Size * ball.y / 100 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(255, 255, 0), cv::FILLED, cv::LINE_AA);
 		}
 
-		const cv::String str = "x" + to_string((Game_State == State::Shooting) ? Game_LeftBalls : Game_Balls);
-		const cv::Size& size = cv::getTextSize(str, font_face, font_size / 2, font_thick / 2, nullptr);
-		cv::putText(mat, str, cv::Point(Game_X * 480 / 100 - size.width / 2, 480 * 8.5f / 9 + size.height / 2), font_face, font_size / 2, cv::Scalar(255, 255, 0), font_thick / 2);
-		cv::circle(mat, cv::Point(Game_X * 480 / 100 , 480 - ball_rad * 240.f / 100), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
+		if (Game_State != State::Shooting || Game_LeftBalls > 0)
+		{
+			const cv::String str = "x" + to_string((Game_State == State::Shooting) ? Game_LeftBalls : Game_Balls);
+			const cv::Size& size = cv::getTextSize(str, font_face, font_size / 2, font_thick / 2, nullptr);
+			cv::putText(mat, str, cv::Point(Game_X * display_Size / 100 - size.width / 2, display_Size * 8.5f / 9 + size.height / 2 + display_DeltaY), font_face, font_size / 2, cv::Scalar(255, 255, 0), font_thick / 2);
+			cv::circle(mat, cv::Point(Game_X * display_Size / 100, display_Size - ball_rad * display_Size / 100 + display_DeltaY), ball_rad * display_Size / 100, cv::Scalar(255, 255, 0), cv::FILLED, cv::LINE_AA);
+		}
+
+		std::list<Effect> effects;
+		effects.swap(Game_effects);
+
+		for (Effect& effect : effects)
+		{
+			if (effect)
+		}
 
 		cv::imshow("mainWindow", mat);
 	}
@@ -745,87 +787,29 @@ tuple<GameAbstractData, int, int> fabric_data()
 
 int main()
 {
-	cv::Mat wind(489, 489, CV_8UC3);
+	//Height, Width
+	cv::Mat wind(640, 480, CV_8UC3);
 	SetPriorityClass(GetCurrentProcess(), 0x100);
 
 	SBBGame game;
-	GameAbstractData data;
-	const int action_count = 32;
-
-	int deg = 0;
-	int balls;
-
-	int best_deg = 0;
-	float best_score = 0;
-	float second_score = 0;
-
-	{
-		const auto false_data = fabric_data();
-		data = get<0>(false_data);
-		balls = get<1>(false_data);
-		game.custom_initialize(data, balls, get<2>(false_data));
-	}
 	
 	while (game.Flag_run)
 	{
 		switch (game.Game_State)
 		{
 		case State::Shoot:
-			if (deg == 0)
-			{
-				balls = game.Game_Balls;
-				best_deg = 0;
-				best_score = 0;
-				second_score = 0;
-			}
-			cout << "\r" << deg << " / " << action_count << " is completed";
-			game.action_shoot((deg / (float)action_count));
-			++deg;
+			game.action_shoot((random() % 256) / 256.f);
 			break;
 		case State::Result:
-			float score;
-			bool died;
-
-			tie(score, died) = game.assess_func(game.Game_Balls);
-
-			if ((died ? 0 : score) > best_score)
-			{
-				second_score = best_score;
-				best_score = score;
-				best_deg = deg - 1;
-			}
-			else if ((died ? 0 : score) > second_score)
-			{
-				second_score = score;
-			}
-			savedata(data, balls, deg - 1, score, 0);
-
-			if (deg == action_count + 1)
-			{
-				cout << "\r" << "state fully simulated. Best degreed is " << best_deg << " and it get " << best_score << "pts " << endl;
-				
-				const auto false_data = fabric_data();
-				data = get<0>(false_data);
-				balls = get<1>(false_data);
-				game.custom_initialize(data, balls, get<2>(false_data));
-
-				deg = 0;
-			}
-			else
-			{
-				game.importData(data, balls);
-				game.Game_t = 0;
-				game.Game_State = State::Shoot;
-				game.log_begin();
-			}
+			game.Game_State = State::Prepare;
 			break;
 		}
 		game.loop();
-		/*if (game.Game_t % 10 == 0)
+		if (game.Game_t % 10 == 0)
 		{
 			game.draw(wind);
 			cv::waitKey(1);
-		}*/
+		}
 
 	}
 
