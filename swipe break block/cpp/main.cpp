@@ -8,6 +8,7 @@
 
 #include <thread>
 #include <future>
+#include <functional>
 
 #include <opencv2/opencv.hpp>
 
@@ -935,44 +936,73 @@ void runAIOnly()
 	}
 }
 
-int main()
+void mouseCallback(int ev, int x, int y, int flags, void* data)
 {
-	runAIOnly();
+	(*((function<void(int, int, int, int)>*)data))(ev, x, y, flags);
+}
+
+void runPlayerOnly()
+{
 	//Height, Width
-	/*cv::Mat wind1(1048, 960, CV_8UC3);
 	cv::Mat wind2(1048, 960, CV_8UC3);
 	SetPriorityClass(GetCurrentProcess(), 0x100);
 
-	SBBGame gameAI, gamePlayer;
-	gameAI.window_name = "AI";
-	gameAI.window_x = 0;
-	gameAI.window_y = 0;
-
+	SBBGame gamePlayer;
 	gamePlayer.window_name = "Player";
-	gamePlayer.window_x = 960;
+	gamePlayer.window_x = (1920 - 960) / 2;
 	gamePlayer.window_y = 0;
-	gamePlayer.draw(wind2);
-	
-	while (gameAI.Flag_run)
-	{
-		switch (gameAI.Game_State)
+
+	function<void(int, int, int, int)> playerMouse = [&](int ev, int x, int y, int flags) {
+		switch (ev)
 		{
-		case State::Shoot:
-			gameAI.action_shoot(getBestDegreed(gameAI.exportData(), gameAI.Game_Balls, gameAI.Game_Score));
-			break;
-		case State::Result:
-			gameAI.Game_State = State::Prepare;
-			gameAI.Game_X = gameAI.Game_NX;
+		case cv::EVENT_LBUTTONDOWN:
+			if (gamePlayer.Game_State == State::Shoot)
+			{
+				float rad = atan2f(
+					gamePlayer.Game_X - (float)x / gamePlayer.display_Size * 100,
+					gamePlayer.Game_Y - ((float)y - gamePlayer.display_DeltaY) / gamePlayer.display_Size * 100
+				);
+				
+				//if (rad > DirectX::XM_PIDIV2) rad -= DirectX::XM_2PI;
+				//gamePlayer.Game_shootBalls.push_back(Ball{ (float)x / gamePlayer.display_Size * 100, ((float)y - gamePlayer.display_DeltaY) / gamePlayer.display_Size * 100, 0, 0, 0 });
+				//gamePlayer.Game_shootBalls.push_back(Ball{ gamePlayer.Game_X, gamePlayer.Game_Y, 0, 0, 0 });
+				rad = DirectX::XM_PIDIV2 - rad;
+				cout << rad << endl;
+				float deg = (rad - 0.15f + DirectX::XM_PI) / (DirectX::XM_PI - 0.3f);
+				if (deg >= 0 && deg <= 1)
+				{
+					gamePlayer.action_shoot(deg);
+				}
+			}
 			break;
 		}
-		gameAI.loop();
-		if (gameAI.Game_t % 40 == 0)
+	};
+	
+	cv::namedWindow(gamePlayer.window_name);
+	cv::setMouseCallback(gamePlayer.window_name, mouseCallback, &playerMouse);
+
+	while (gamePlayer.Flag_run)
+	{
+		switch (gamePlayer.Game_State)
 		{
-			gameAI.draw(wind1);
+		case State::Result:
+			gamePlayer.Game_State = State::Prepare;
+			gamePlayer.Game_X = gamePlayer.Game_NX;
+			break;
+		}
+		gamePlayer.loop();
+		if (gamePlayer.Game_t % 40 == 0)
+		{
+			gamePlayer.draw(wind2);
 			cv::waitKey(1);
 		}
 
-	}*/
+	}
+}
+
+int main()
+{
+	runPlayerOnly();
 
 	return 0;
 }
