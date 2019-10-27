@@ -5,13 +5,13 @@
 #include <vector>
 #include <time.h>
 #include <random>
-#define _USE_MATH_DEFINES
-#include <math.h>
 
 #include <opencv2/opencv.hpp>
 
 #define _AMD64_
 #include <processthreadsapi.h>
+
+#include <DirectXMath.h>
 
 using namespace std;
 
@@ -225,7 +225,7 @@ public:
 	}
 	void action_shoot(const float& deg)
 	{
-		float rad = (deg * ((float)M_PI - 0.3f)) - (float)M_PI + 0.15f;
+		float rad = (deg * (DirectX::XM_PI - 0.3f)) - DirectX::XM_PI + 0.15f;
 		Game_LeftBalls = Game_Balls;
 		Game_ShootRad = rad;
 		Game_LastShoot = Game_t;
@@ -360,14 +360,14 @@ public:
 								if (passed[0][point.x] && passed[1][point.y])
 								{
 									Point<float>vec{ nearest.x - ball.x, nearest.y - ball.y };
-									float rad_C2P = atan2f(vec.y, vec.x) + (float)M_PI_2;
+									float rad_C2P = atan2f(vec.y, vec.x) + DirectX::XM_PIDIV2;
 									float rad = atan2f(ball.vx, ball.vy);
 									float length = sqrtf(powf(ball.vy, 2) + powf(ball.vx, 2));
 									float new_rad = -(rad - rad_C2P) + rad_C2P;
 
-									while (new_rad < (float)M_PI)
-										new_rad += (float)M_PI * 2;
-									new_rad -= (float)M_PI * 2;
+									while (new_rad < DirectX::XM_PI)
+										new_rad += DirectX::XM_2PI;
+									new_rad -= DirectX::XM_2PI;
 
 									if (new_rad >= 0.f && new_rad < 0.15f)
 									{
@@ -377,13 +377,13 @@ public:
 									{
 										new_rad = -0.15f;
 									}
-									if (new_rad >= M_PI - 0.15f && new_rad < M_PI)
+									if (new_rad >= DirectX::XM_PI - 0.15f && new_rad < DirectX::XM_PI)
 									{
-										new_rad = (float)M_PI - 0.15f;
+										new_rad = DirectX::XM_PI - 0.15f;
 									}
-									if (new_rad >= -M_PI && new_rad < 0.15 - M_PI)
+									if (new_rad >= -DirectX::XM_PI && new_rad < 0.15 - DirectX::XM_PI)
 									{
-										new_rad = 0.15f - (float)M_PI;
+										new_rad = 0.15f - DirectX::XM_PI;
 									}
 
 									ball.vx = cosf(new_rad);
@@ -442,7 +442,7 @@ public:
 							else
 							{
 								Point<float> vec{ ball.x - (x + 0.5f) * 100 / 6, ball.y - (y + 0.5f) * 100 / 9};
-								float rad = atan2f(vec.y, vec.x) / (float)M_PI;
+								float rad = atan2f(vec.y, vec.x) / DirectX::XM_PI;
 								if (rad >= 1.f / 4 && rad < 3.f / 4)
 									ball.vy = abs(ball.vy);
 								else if (rad >= 3.f / 4 || rad < -3.f / 4)
