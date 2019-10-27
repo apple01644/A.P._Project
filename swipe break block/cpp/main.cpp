@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
+
 #include <vector>
 #include <time.h>
 #include <random>
@@ -7,6 +9,9 @@
 #include <math.h>
 
 #include <opencv2/opencv.hpp>
+
+#define _AMD64_
+#include <processthreadsapi.h>
 
 using namespace std;
 
@@ -56,6 +61,13 @@ struct Circle {
 	float x, y, r;
 };
 
+struct Log {
+	int x;
+	int y;
+	int t;
+	BlockType type;
+};
+
 bool Collision_Rect_Circle(const Rect& rect, const Circle& circle)
 {
 	_2Point rectA(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h);
@@ -65,19 +77,19 @@ bool Collision_Rect_Circle(const Rect& rect, const Circle& circle)
 	{
 		if ((circle.y > rect.y + rect.h || circle.y < rect.y) && (circle.x > rect.x + rect.w || circle.x < rect.x))
 		{
-			Point<float> near;
+			Point<float> nearest;
 
 			if (circle.x > rect.x + rect.w / 2)
-				near.x = rect.x + rect.w;
+				nearest.x = rect.x + rect.w;
 			else
-				near.x = rect.x;
+				nearest.x = rect.x;
 
 			if (circle.y > rect.y + rect.h / 2)
-				near.y = rect.y + rect.h;
+				nearest.y = rect.y + rect.h;
 			else
-				near.y = rect.y;
+				nearest.y = rect.y;
 
-			return sqrtf(powf(near.x - circle.x, 2) + powf(near.y - circle.y, 2)) <= circle.r;
+			return sqrtf(powf(nearest.x - circle.x, 2) + powf(nearest.y - circle.y, 2)) <= circle.r;
 		}
 		else
 		{
@@ -90,16 +102,23 @@ bool Collision_Rect_Circle(const Rect& rect, const Circle& circle)
 	}
 }
 
+const static int Game_Width = 6;
+const static int Game_Height = 9;
+
+struct GameAbstractData {
+	float shoot_x;
+	float type_map[Game_Width][Game_Height];
+	float num_map[Game_Width][Game_Height];
+
+};
+
 class SBBGame {
 public:
-	const static int Game_Width = 6;
-	const static int Game_Height = 9;
 	Block Game_Map[Game_Width][Game_Height];
 
 	std::vector<Ball> Game_shootBalls;
 	int Game_Score;
 	float Game_X, Game_NX;
-	const float Game_Y = 100 - ball_rad;
 	int Game_LeftBalls, Game_Balls;
 	State Game_State;
 	uint64_t Game_LastShoot = 0;
@@ -113,8 +132,10 @@ public:
 
 	const float dt = 0.1f;
 	const float ball_rad = 100.f / Game_Height * 0.185f;
+	const float Game_Y = 100 - ball_rad;
 
 	mt19937_64 mt = mt19937_64(time(nullptr));
+	std::vector<Log> logs;
 
 	SBBGame() {
 		initialize();
@@ -135,15 +156,15 @@ public:
 			}
 		}
 
-		int left_ball = Game_Score / 20 + 1;
+		int left_ball = Game_Score / 5 + 3;
 		for (int x = 0; x < Game_Width; ++x)
 		{
 			Block& block = Game_Map[x][0];
 			if (block.type == BlockType::None)
 			{
-				if (mt() % 2 == 0)
+				if (mt() % 100 < 50)
 				{
-					Game_Map[cursor][0] = Block(BlockType::Block, Game_Score);
+					Game_Map[x][0] = Block(BlockType::Block, Game_Score);
 					if (--left_ball == 0) break;
 				}
 			}
@@ -166,7 +187,7 @@ public:
 
 		for (int x = 0; x < Game_Width; ++x)
 		{
-			Block& block = Game_Map[x][0];
+			Block& block = Game_Map[x][Game_Height - 1];
 			switch (block.type)
 			{
 			case BlockType::Block:
@@ -182,7 +203,9 @@ public:
 			}
 		}
 
+		++Game_Score;
 		Game_State = State::Shoot;
+		log_begin();
 	}
 
 	void action_cleanup()
@@ -217,6 +240,13 @@ public:
 		Game_State = State::Prepare;
 	}
 
+	void custom_initialize(const GameAbstractData& data, int balls, int score) {
+		
+		importData(data, balls);
+		Game_Score = score;
+		Game_State = State::Shoot;
+	}
+
 	void loop() {
 		++Game_t;
 		switch (Game_State)
@@ -235,7 +265,6 @@ public:
 			{
 				if (Game_shootBalls.size() == 0)
 				{
-					++Game_Score;
 					if (Flag_user)
 						Game_State = State::CleanUp;
 					else
@@ -254,23 +283,23 @@ public:
 
 		for (Ball& ball : Game_shootBalls)
 		{
-			ball.x -= ball.vx * dt;
-			ball.y -= ball.vy * dt;
+			ball.x += ball.vx * dt;
+			ball.y += ball.vy * dt;
 
 			if (ball.x > 100 - ball_rad)
 			{
 				ball.x = 100 - ball_rad;
-				ball.vx = -fabsf(ball.vx);
+				ball.vx = -abs(ball.vx);
 			}
 			if (ball.x < ball_rad)
 			{
 				ball.x = ball_rad;
-				ball.vx = fabsf(ball.vx);
+				ball.vx = abs(ball.vx);
 			}
 			if (ball.y < ball_rad)
 			{
 				ball.y = ball_rad;
-				ball.vy = fabsf(ball.vy);
+				ball.vy = abs(ball.vy);
 			}
 
 			for (int x = 0; x < Game_Width; ++x)
@@ -285,28 +314,28 @@ public:
 							if ((ball.y > (y * 100 / 9.f + 1) + (100 / 9.f - 2) || ball.y < (y * 100 / 9.f + 1)) &&
 								(ball.x > (x * 100 / 6.f + 1) + (100 / 6.f - 2) || ball.x < (x * 100 / 6.f + 1)))
 							{
-								Point<float> near;
+								Point<float> nearest;
 								Point<int> point;
 
 								if (ball.x > (x * 100 / 6.f + 1) + (100 / 6.f - 2) / 2)
 								{
-									near.x = (x * 100 / 6.f + 1) + (100 / 6.f - 2);
+									nearest.x = (x * 100 / 6.f + 1) + (100 / 6.f - 2);
 									point.x = 1;
 								}
 								else
 								{
-									near.x = (x * 100 / 6.f + 1);
+									nearest.x = (x * 100 / 6.f + 1);
 									point.x = 0;
 								}
 
 								if (ball.y > (y * 100 / 9.f + 1) + (100 / 9.f - 2) / 2)
 								{
-									near.y = (y * 100 / 9.f + 1) + (100 / 9.f - 2);
+									nearest.y = (y * 100 / 9.f + 1) + (100 / 9.f - 2);
 									point.y = 1;
 								}
 								else
 								{
-									near.y = (y * 100 / 9.f + 1);
+									nearest.y = (y * 100 / 9.f + 1);
 									point.y = 0;
 								}
 
@@ -321,7 +350,7 @@ public:
 
 								if (passed[0][point.x] && passed[1][point.y])
 								{
-									Point<float>vec{ near.x - ball.x, near.y - ball.y };
+									Point<float>vec{ nearest.x - ball.x, nearest.y - ball.y };
 									float rad_C2P = atan2f(vec.y, vec.x) + (float)M_PI_2;
 									float rad = atan2f(ball.vx, ball.vy);
 									float length = sqrtf(powf(ball.vy, 2) + powf(ball.vx, 2));
@@ -387,38 +416,38 @@ public:
 									switch (side)
 									{
 									case 0:
-										ball.vx = fabsf(ball.vx);
+										ball.vx = abs(ball.vx);
 										break;
 									case 1:
-										ball.vy = -fabsf(ball.vy);
+										ball.vy = -abs(ball.vy);
 										break;
 									case 2:
-										ball.vx = -fabsf(ball.vx);
+										ball.vx = -abs(ball.vx);
 										break;
 									case 3:
-										ball.vy = fabsf(ball.vy);
+										ball.vy = abs(ball.vy);
 										break;
 									}
 								}
 							}
 							else
 							{
-								Point<float> vec{ (ball.x - (x + 0.5f) * 100 / 6) * 6, (ball.y - (y + 0.5f) * 100 / 9) * 9 };
+								Point<float> vec{ ball.x - (x + 0.5f) * 100 / 6, ball.y - (y + 0.5f) * 100 / 9};
 								float rad = atan2f(vec.y, vec.x) / (float)M_PI;
-								if (rad >= 1 / 4 && rad < 3 / 4)
-									ball.vy = fabsf(ball.vy);
-								else if (rad >= 3 / 4 && rad < -3 / 4)
-									ball.vx = -fabsf(ball.vx);
-								else if (rad >= -3 / 4 && rad < -1 / 4)
-									ball.vy = -fabsf(ball.vy);
-								else if (rad >= -1 / 4 && rad < 1 / 4)
-									ball.vx = fabsf(ball.vx);
+								if (rad >= 1.f / 4 && rad < 3.f / 4)
+									ball.vy = abs(ball.vy);
+								else if (rad >= 3.f / 4 || rad < -3.f / 4)
+									ball.vx = -abs(ball.vx);
+								else if (rad >= -3.f / 4 && rad < -1.f / 4)
+									ball.vy = -abs(ball.vy);
+								else if (rad >= -1.f / 4 || rad < 1.f / 4)
+									ball.vx = abs(ball.vx);
 							}
 
 							if (block.lastHitId != ball.id || block.lastHitTime + dt * 15 < Game_t)
 							{
 								--block.num;
-								//Data Log
+								logs.push_back(Log{ x, y, block.num, BlockType::Block });
 								block.lastHitId = ball.id;
 								block.lastHitTime = Game_t;
 							}
@@ -430,7 +459,7 @@ public:
 							if (sqrtf(powf(vec.x, 2) + powf(vec.y, 2)) <= ball_rad * 2 && block.num > 0)
 							{
 								block.num = 0;
-								//Data Log
+								logs.push_back(Log{x, y, 0, BlockType::Ball});
 							}
 						}
 						break;
@@ -448,14 +477,12 @@ public:
 					if (block.num <= 0) 
 					{
 						block.type = BlockType::None;
-						cout << "Break Block\n";
 					}
 					break;
 				case BlockType::Ball:
 					if (block.num <= 0)
 					{
 						block.type = BlockType::None;
-						cout << "Eat Ball\n";
 						++Game_Balls;
 					}
 					break;
@@ -467,7 +494,7 @@ public:
 
 		for (Ball& ball : balls)
 		{
-			if (ball.y < 100 - ball_rad)
+			if (ball.y <= Game_Y)
 			{
 				Game_shootBalls.push_back(ball);
 			}
@@ -478,28 +505,299 @@ public:
 			}
 		}
 	}
+
+	void draw(const cv::Mat& _mat) {
+		cv::Mat mat = _mat.clone();
+		mat = cv::Scalar(255, 255, 255);
+		for (int x = 0; x < Game_Width; ++x)
+		{
+			for (int y = 0; y < Game_Height; ++y)
+			{
+				switch (Game_Map[x][y].type)
+				{
+				case BlockType::Block:
+					cv::Mat(mat, cv::Rect(480 * x / 6, 480 * y / 9, 480 / 6, 480 / 9)) = cv::Scalar(0, 127.f - 127.f * Game_Map[x][y].num / Game_Score, 255.f);
+					break;
+				case BlockType::Ball:
+					cv::circle(mat, cv::Point(480 * (x + 0.5f) / 6, 480 * (y + 0.5f) / 9), ball_rad * 480.f / 100, cv::Scalar(0, 255, 0), cv::FILLED);
+					break;
+				}
+			}
+		}
+
+		for (const Ball& ball : Game_shootBalls)
+		{
+			cv::circle(mat, cv::Point(480 * ball.x / 100, 480 * ball.y / 100), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
+		}
+
+		cv::imshow("mainWindow", mat);
+	}
+
+	tuple<float, bool> assess_func(int balls) {
+		float score = 0;
+		uint64_t getting_ball = 0;
+		for (const Log& log : logs)
+		{
+			if (log.type == BlockType::Ball)
+			{
+				++getting_ball;
+			}
+			else
+			{
+				score += 1.f * (1 + log.y / 7.f);
+			}
+		}
+
+		score /= balls;
+		score += getting_ball * 5;
+
+		bool died = false;
+
+		for (int x = 0; x < Game_Width; ++x)
+		{
+			Block& block = Game_Map[x][Game_Height - 2];
+			switch (block.type)
+			{
+			case BlockType::Block:
+				died = true;
+				break;
+			case BlockType::Ball:
+				died = true;
+				score += 5.f;
+				break;
+			}
+		}
+
+		return make_tuple(score, died);
+	}
+
+	void log_begin() {
+		logs.clear();
+	}
+
+	GameAbstractData exportData() {
+		GameAbstractData data;
+		data.shoot_x = Game_X;
+		for (int x = 0; x < Game_Width; ++x)
+		{
+			for (int y = 0; y < Game_Height; ++y)
+			{
+				const Block& block = Game_Map[x][y];
+				switch (block.type)
+				{
+				case BlockType::Ball:
+					data.num_map[x][y] = 0.f;
+					data.type_map[x][y] = -1.f;
+					break;
+				case BlockType::Block:
+					data.num_map[x][y] = block.num / (float)Game_Balls;
+					data.type_map[x][y] = 1.f;
+					break;
+				case BlockType::None:
+					data.num_map[x][y] = 0.f;
+					data.type_map[x][y] = 0.f;
+					break;
+				}
+			}
+		}
+		return data;
+	}
+
+	void importData(const GameAbstractData& data, const int& balls) {
+		Game_X = data.shoot_x;
+		Game_Balls = balls;
+
+		for (int x = 0; x < Game_Width; ++x)
+		{
+			for (int y = 0; y < Game_Height; ++y)
+			{
+				if (data.type_map[x][y] == 1.f)
+				{
+					Game_Map[x][y] = Block(BlockType::Block, data.num_map[x][y] * balls);
+				}
+				else if (data.type_map[x][y] == -1.f)
+				{
+					Game_Map[x][y] = Block(BlockType::Ball, 1);
+				}
+				else
+				{
+					Game_Map[x][y] = Block(BlockType::None, 0);
+				}
+			}
+		}
+	}
 };
+
+void savedata(const GameAbstractData& data, int balls, int action, float score, int died)
+{
+	ofstream file("2.csv", fstream::in | fstream::out | fstream::app | fstream::binary);
+	ostringstream ss;
+
+	ss  << data.shoot_x << ";"
+		<< score << ";"
+		<< died << ";"
+		<< action << ";";
+
+	for (int y = 1; y < Game_Height - 1; ++y)
+	{
+		for (int x = 0; x < Game_Width; ++x)
+		{
+			ss << data.type_map[x][y] << ";" <<
+				   data.num_map[x][y] / balls << ";";
+		}
+	}
+	ss << '\n';
+	file << ss.str();
+	file.close();
+}
+
+tuple<GameAbstractData, int, int> fabric_data()
+{
+	static mt19937_64 mt = mt19937_64(time(nullptr));
+	GameAbstractData data;
+
+	//Clear
+	for (int x = 0; x < Game_Width; ++x)
+	{
+		for (int y = 0; y < Game_Height; ++y)
+		{
+			data.num_map[x][y] = 0;
+			data.type_map[x][y] = 0;
+		}
+	}
+
+	//Set Environment
+	int now_score = mt() % 100 + 1;
+	int now_ball = now_score;
+	float proportion_block = 50;
+
+	//Set Header
+	int cursor = mt() % Game_Width;
+	data.type_map[cursor][1] = -1.f;
+
+	for (int x = 0; x < Game_Width; ++x)
+	{
+		if (data.type_map[x][1] == 0.f && mt() % 100 < proportion_block)
+		{
+			data.type_map[x][1] = 1.f;
+			data.num_map[x][1] = now_score;
+		}
+	}
+
+	for (int y = 2; y < Game_Height - 1; ++y)
+	{
+		if (now_ball > 1) {
+			--now_ball;
+			cursor = mt() % Game_Width;
+			data.type_map[cursor][y] = -1.f;
+		}
+
+		proportion_block = 50 - (y - 2) * 9;
+		if (now_score >= y)
+		{
+			for (int x = 0; x < Game_Width; ++x)
+			{
+				if (data.type_map[x][y] == 0.f && mt() % 100 < proportion_block)
+				{
+					data.type_map[x][y] = 1.f;
+					data.num_map[x][y] = mt() % (now_score - y + 1) + 1;
+				}
+			}
+		}
+	}
+
+	data.shoot_x = (mt() % 10000) / 100.f;
+
+	return make_tuple(data, now_ball, now_score);
+}
 
 int main()
 {
-	cv::Mat wind(640, 480, CV_8UC3);
-	cv::imshow("mainWindow", wind);
+	cv::Mat wind(480, 480, CV_8UC3);
+	SetPriorityClass(GetCurrentProcess(), 0x100);
 
 	SBBGame game;
+	GameAbstractData data;
+	int deg = 0;
+	int balls;
+
+	int best_deg = 0;
+	float best_score = 0;
+	float second_score = 0;
+
+	{
+		const auto false_data = fabric_data();
+		data = get<0>(false_data);
+		balls = get<1>(false_data);
+		game.custom_initialize(data, balls, get<2>(false_data));
+	}
+	
 	while (game.Flag_run)
 	{
 		switch (game.Game_State)
 		{
 		case State::Shoot:
-			game.action_shoot(0.5f);
+			if (deg == 0)
+			{
+				balls = game.Game_Balls;
+				best_deg = 0;
+				best_score = 0;
+				second_score = 0;
+				cout << deg << " / " << "128 is completed";
+			}
+			else
+			{
+				cout << "\r" << deg << " / " << "128 is completed";
+			}
+			game.action_shoot((deg / 128.f));
+			++deg;
 			break;
 		case State::Result:
-			cout << "one turn end" << endl;
-			game.Game_State = State::Prepare;
-			game.Game_t = 0;
+			float score;
+			bool died;
+
+			tie(score, died) = game.assess_func(game.Game_Balls);
+
+			if (deg == 129)
+			{
+				cout << "\r" << "state fully simulated. Best degreed is " << best_deg << " and it get " << best_score << "pts " << endl;
+
+				if (second_score <= 0 && best_score > 100)
+				{
+					savedata(data, balls, deg - 1, score, 0);
+					cout << "gotcha!" << endl;
+				}
+
+				const auto false_data = fabric_data();
+				data = get<0>(false_data);
+				balls = get<1>(false_data);
+				game.custom_initialize(data, balls, get<2>(false_data));
+
+				deg = 0;
+			}
+			else
+			{
+				if (died) score = 0;
+				if (score > best_score)
+				{
+					second_score = best_score;
+					best_score = score;
+					best_deg = deg - 1;
+				}
+				game.importData(data, balls);
+				game.Game_t = 0;
+				game.Game_State = State::Shoot;
+				game.log_begin();
+			}
 			break;
 		}
-		game.loop();
+		game.loop();/*
+		if (game.Game_t % 20 == 0)
+		{
+			game.draw(wind);
+			cv::waitKey(1);
+		}*/
+
 	}
 
 	return 0;
