@@ -263,7 +263,7 @@ public:
 		case State::Shooting:
 			if (Game_LeftBalls > 0)
 			{
-				if (Game_t - Game_LastShoot > 300)
+				if (Game_t - Game_LastShoot > 100)
 				{
 					Game_shootBalls.push_back(Ball{ Game_X, Game_Y, cosf(Game_ShootRad), sinf(Game_ShootRad), Game_LeftBalls });
 					--Game_LeftBalls;
@@ -546,8 +546,8 @@ public:
 
 		const cv::String str = "x" + to_string((Game_State == State::Shooting) ? Game_LeftBalls : Game_Balls);
 		const cv::Size& size = cv::getTextSize(str, font_face, font_size / 2, font_thick / 2, nullptr);
-		cv::putText(mat, str, cv::Point(Game_X * 480 / 100, 480 * 8.f / 9), font_face, font_size / 2, cv::Scalar(255, 255, 0), font_thick / 2);
-		cv::circle(mat, cv::Point(Game_X * 480 / 100, 480 - ball_rad), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
+		cv::putText(mat, str, cv::Point(Game_X * 480 / 100 - size.width / 2, 480 * 8.5f / 9 + size.height / 2), font_face, font_size / 2, cv::Scalar(255, 255, 0), font_thick / 2);
+		cv::circle(mat, cv::Point(Game_X * 480 / 100 , 480 - ball_rad * 240.f / 100), ball_rad * 480.f / 100, cv::Scalar(255, 255, 0), cv::FILLED);
 
 		cv::imshow("mainWindow", mat);
 	}
@@ -652,17 +652,17 @@ void savedata(const GameAbstractData& data, int balls, int action, float score, 
 	ofstream file("2.csv", fstream::in | fstream::out | fstream::app | fstream::binary);
 	ostringstream ss;
 
-	ss  << data.shoot_x << ";"
-		<< score << ";"
-		<< died << ";"
-		<< action << ";";
+	ss  << data.shoot_x << ","
+		<< score << ","
+		<< died << ","
+		<< action << ",";
 
 	for (int y = 1; y < Game_Height - 1; ++y)
 	{
 		for (int x = 0; x < Game_Width; ++x)
 		{
-			ss << data.type_map[x][y] << ";" <<
-				   data.num_map[x][y] / balls << ";";
+			ss << data.type_map[x][y] << "," <<
+				data.num_map[x][y] / balls << ",";
 		}
 	}
 	ss << '\n';
@@ -687,21 +687,13 @@ tuple<GameAbstractData, int, int> fabric_data()
 	//Set Environment
 	int now_score = random() % 100 + 1;
 	int now_ball = now_score;
-	float proportion_block = 50;
+	float proportion_block = random() % 100;
 
-	//Set Header
+	//Set Header Ball
 	int cursor = random() % Game_Width;
 	data.type_map[cursor][1] = -1.f;
 
-	for (int x = 0; x < Game_Width; ++x)
-	{
-		if (data.type_map[x][1] == 0.f && random() % 100 < proportion_block)
-		{
-			data.type_map[x][1] = 1.f;
-			data.num_map[x][1] = 1.f;
-		}
-	}
-
+	//Set body
 	for (int y = 2; y < Game_Height - 1; ++y)
 	{
 		if (now_ball > 1) {
@@ -710,7 +702,7 @@ tuple<GameAbstractData, int, int> fabric_data()
 			data.type_map[cursor][y] = -1.f;
 		}
 
-		proportion_block = 50 - (y - 2) * 9;
+		proportion_block = random() % 100;
 		const int num = now_score - y + 1;
 		if (now_score >= y)
 		{
@@ -722,6 +714,27 @@ tuple<GameAbstractData, int, int> fabric_data()
 					data.num_map[x][y] = (random() % (now_score - y + 1) + 1.f) / now_ball;
 				}
 			}
+		}
+	}
+
+	//Set Header Block
+	while (true)
+	{
+		cursor = random() % Game_Width;
+		if (data.type_map[cursor][1] == 0.f)
+		{
+			data.type_map[cursor][1] = 1.f;
+			data.num_map[cursor][1] = now_score / (float)now_ball;
+			break;
+		}
+	}
+
+	for (int x = 0; x < Game_Width; ++x)
+	{
+		if (data.type_map[x][1] == 0.f && random() % 100 < proportion_block)
+		{
+			data.type_map[x][1] = 1.f;
+			data.num_map[x][1] = now_score / (float)now_ball;
 		}
 	}
 
@@ -737,6 +750,8 @@ int main()
 
 	SBBGame game;
 	GameAbstractData data;
+	const int action_count = 32;
+
 	int deg = 0;
 	int balls;
 
@@ -762,13 +777,9 @@ int main()
 				best_deg = 0;
 				best_score = 0;
 				second_score = 0;
-				cout << deg << " / " << "128 is completed";
 			}
-			else
-			{
-				cout << "\r" << deg << " / " << "128 is completed";
-			}
-			game.action_shoot((deg / 128.f));
+			cout << "\r" << deg << " / " << action_count << " is completed";
+			game.action_shoot((deg / (float)action_count));
 			++deg;
 			break;
 		case State::Result:
@@ -787,17 +798,12 @@ int main()
 			{
 				second_score = score;
 			}
+			savedata(data, balls, deg - 1, score, 0);
 
-			if (deg == 129)
+			if (deg == action_count + 1)
 			{
-				cout << "\r" << "state fully simulated. Best degreed is " << best_deg << " and it get " << best_score << "pts ";
-
-				if (second_score <= 0 && best_score > 100)
-				{
-					savedata(data, balls, deg - 1, score, 0);
-					cout << "gotcha!" << endl;
-				}
-
+				cout << "\r" << "state fully simulated. Best degreed is " << best_deg << " and it get " << best_score << "pts " << endl;
+				
 				const auto false_data = fabric_data();
 				data = get<0>(false_data);
 				balls = get<1>(false_data);
@@ -815,11 +821,11 @@ int main()
 			break;
 		}
 		game.loop();
-		if (game.Game_t % 20 == 0)
+		/*if (game.Game_t % 10 == 0)
 		{
 			game.draw(wind);
 			cv::waitKey(1);
-		}
+		}*/
 
 	}
 
