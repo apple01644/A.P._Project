@@ -254,7 +254,7 @@ public:
 		case State::Shooting:
 			if (Game_LeftBalls > 0)
 			{
-				if (Game_t - Game_LastShoot > 30)
+				if (Game_t - Game_LastShoot > 300)
 				{
 					Game_shootBalls.push_back(Ball{ Game_X, Game_Y, cosf(Game_ShootRad), sinf(Game_ShootRad), Game_LeftBalls });
 					--Game_LeftBalls;
@@ -758,9 +758,20 @@ int main()
 
 			tie(score, died) = game.assess_func(game.Game_Balls);
 
+			if ((died ? 0 : score) > best_score)
+			{
+				second_score = best_score;
+				best_score = score;
+				best_deg = deg - 1;
+			}
+			else if ((died ? 0 : score) > second_score)
+			{
+				second_score = score;
+			}
+
 			if (deg == 129)
 			{
-				cout << "\r" << "state fully simulated. Best degreed is " << best_deg << " and it get " << best_score << "pts " << endl;
+				cout << "\r" << "state fully simulated. Best degreed is " << best_deg << " and it get " << best_score << "pts ";
 
 				if (second_score <= 0 && best_score > 100)
 				{
@@ -777,13 +788,6 @@ int main()
 			}
 			else
 			{
-				if (died) score = 0;
-				if (score > best_score)
-				{
-					second_score = best_score;
-					best_score = score;
-					best_deg = deg - 1;
-				}
 				game.importData(data, balls);
 				game.Game_t = 0;
 				game.Game_State = State::Shoot;
@@ -791,8 +795,8 @@ int main()
 			}
 			break;
 		}
-		game.loop();/*
-		if (game.Game_t % 20 == 0)
+		game.loop();
+		/*if (game.Game_t % 20 == 0)
 		{
 			game.draw(wind);
 			cv::waitKey(1);
