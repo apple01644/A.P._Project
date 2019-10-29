@@ -3,12 +3,14 @@
 #include <sstream>
 
 #include <vector>
+#include <unordered_map>
 #include <time.h>
 #include <random>
 
 #include <thread>
 #include <future>
 #include <functional>
+#include <algorithm>
 
 #include <opencv2/opencv.hpp>
 
@@ -45,6 +47,12 @@ enum class AnimationState {
 	None,
 	Dying,
 	GettingDowns
+};
+
+enum class GameState {
+	Login,
+	Play,
+	GameOver
 };
 
 struct Block {
@@ -702,7 +710,7 @@ public:
 			float rad = (guide_line * (DirectX::XM_PI - 0.3f)) - DirectX::XM_PI + 0.15f;
 			float vx = cosf(rad), vy = sinf(rad);
 
-			int time = Penalty_disable_GuideLine ? 32660 : 0;
+			int time = Penalty_disable_GuideLine ? 32460 : 0;
 			list<cv::Point2f> pts;
 			while (pt.y <= Game_Y && time < 32768) {
 				if (time % 24 == 0) {
@@ -886,12 +894,12 @@ public:
 				while (itr_b != pts.cend())
 				{
 
-					if (++x % 2 == 0)cv::line(mat, (*itr_f) * display_Size / 100.f, (*itr_b) * display_Size / 100.f, cv::Scalar(243, 167, 94), 3, cv::LINE_AA);
+					if (++x % 2 == 0)cv::line(mat, (*itr_f) * display_Size / 100.f, (*itr_b) * display_Size / 100.f, cv::Scalar(blue_ball_color.z, blue_ball_color.y, blue_ball_color.x), 3, cv::LINE_AA);
 					++itr_f;
 					++itr_b;
 				}
 
-				cv::circle(mat, cv::Point(display_Size* itr_f->x / 100, display_Size * itr_f->y / 100), ball_rad* display_Size / 100, cv::Scalar(243, 167, 94), cv::FILLED, cv::LINE_AA);
+				if (!Penalty_disable_GuideLine) cv::circle(mat, cv::Point(display_Size* itr_f->x / 100, display_Size * itr_f->y / 100), ball_rad* display_Size / 100, cv::Scalar(blue_ball_color.z, blue_ball_color.y, blue_ball_color.x), cv::FILLED, cv::LINE_AA);
 			}
 
 		}
@@ -928,7 +936,7 @@ public:
 					}
 					break;
 				case BlockType::Ball:
-					cv::circle(mat, cv::Point(display_Size * (x + 0.5f) / 6, display_Size * (y + 0.5f) / 9) + animationDelta, (ball_rad + 0.625f + 0.3f * (sinf(Game_t / 60.f) / 2 + 0.5f)) * display_Size / 100, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
+					cv::circle(mat, cv::Point(display_Size * (x + 0.5f) / 6, display_Size * (y + 0.5f) / 9) + animationDelta, (ball_rad + 0.625f + 0.3f * (sinf(Game_t / 60.f) / 2 + 0.5f)) * display_Size / 100, cv::Scalar(green_ball_color.z, green_ball_color.y, green_ball_color.x), 2, cv::LINE_AA);
 					cv::circle(mat, cv::Point(display_Size * (x + 0.5f) / 6, display_Size * (y + 0.5f) / 9) + animationDelta, ball_rad * display_Size / 100, cv::Scalar(green_ball_color.z, green_ball_color.y, green_ball_color.x), cv::FILLED, cv::LINE_AA);
 					break;
 				}
@@ -961,7 +969,7 @@ public:
 			}
 			else
 			{
-				score += 1.f * (1 + log.y / 7.f);
+				score += 1.f * (1 + log.y / 5.f);
 			}
 		}
 
@@ -1334,6 +1342,34 @@ void runPlayerOnly()
 	}
 }
 
+void loadRank(multimap<int, string, greater<int>>& ranks)
+{
+	ranks.clear();
+	ifstream file("rank.data");
+
+	if (file.fail() && !file.eof()) return;
+
+	do
+	{
+		int first;
+		string second;
+		file >> second;
+		if (file.eof()) break;
+		file >> first;
+		ranks.insert(pair(first, second));
+	} while (!file.eof());
+}
+
+void saveRank(const multimap<int, string, greater<int>>& ranks)
+{
+	ofstream file("rank.data");
+
+	for (auto itr : ranks)
+	{
+		file << itr.second << " " << itr.first << endl;
+	}
+}
+
 void runBoth()
 {
 	//Height, Width
@@ -1356,29 +1392,47 @@ void runBoth()
 
 	thread trd;
 	bool trd_run = false;
+	GameState lancher_state = GameState::Login;
+	char initial[3];
+	int initial_cursor = 0;
 
-	SBBGame gamePlayer, gameAI;
+	multimap<int, string, greater<int>> ranks;
+	loadRank(ranks);
+
+	SBBGame gamePlayer, gameAI, gameBackground;
 	gamePlayer.back_color = { 200.f, 180.f, 180.f };
 	gameAI.back_color = { 180.f, 180.f, 200.f };
+	gameBackground.back_color = { 180.f, 180.f, 200.f };
 
 	gamePlayer.fore_color = { 240.f, 240.f, 240.f };
 	gameAI.fore_color = { 240.f, 240.f, 240.f };
+	gameBackground.fore_color = { 240.f, 240.f, 240.f };
 
-	const DirectX::XMFLOAT3 highest_color = { 230.f,   5.f,   0.f };
-	const DirectX::XMFLOAT3  lowest_color = { 253.f, 204.f,  77.f };
-	const DirectX::XMFLOAT3  green_ball_color = { 0.f, 255.f,  0.f };
-	const DirectX::XMFLOAT3  blue_ball_color = { 94.f, 167.f,  243.f };
+	const DirectX::XMFLOAT3 highest_color    = { 230.f,   5.f,   0.f };
+	const DirectX::XMFLOAT3 lowest_color     = { 253.f, 204.f,  77.f };
+	const DirectX::XMFLOAT3 green_ball_color = { 0.f, 255.f,  0.f };
+	const DirectX::XMFLOAT3 blue_ball_color  = { 94.f, 167.f,  243.f };
+
+	
+	gameBackground.highest_color = blend(highest_color, gameBackground.fore_color, 0.25f);
+	gameBackground.lowest_color  = blend(lowest_color, gameBackground.fore_color, 0.25f);
+	gameBackground.green_ball_color = blend(green_ball_color, gameBackground.fore_color, 0.25f);
+	gameBackground.blue_ball_color = blend(blue_ball_color, gameBackground.fore_color, 0.25f);
 
 	gamePlayer.Flag_custom_state = true;
-	gameAI.Flag_custom_state = true;
 	gamePlayer.Flag_animation = true;
-
+	gameAI.Flag_custom_state = true;
+	gameAI.Flag_animation = true;
+	
 	gamePlayer.display_DeltaX = displayPlayer.x;
 	gamePlayer.display_DeltaY = displayPlayer.y;
 	gamePlayer.display_Size = displayPlayer.width;
 	gameAI.display_DeltaX = displayAI.x;
 	gameAI.display_DeltaY = displayAI.y;
 	gameAI.display_Size = displayAI.width;
+	gameBackground.display_DeltaX = displayAI.x;
+	gameBackground.display_DeltaY = displayAI.y;
+	gameBackground.display_Size = displayAI.width;
 	
 	vector<cv::Mat> icons;
 	icons.push_back(cv::imread("icon/PLAYER_Q.png"));
@@ -1408,16 +1462,16 @@ void runBoth()
 	float playerStack = 0;
 	float aiStack = 0;
 	const float playerSkillCost[4] = { 200.f, 300.f, 400.f, 700.f };
-	const float aiSkillCost[4] = { 250.f, 300.f, 375.f, 500.f };
+	const float aiSkillCost[4] = { 150.f, 225.f, 575.f, 700.f };
 	bool playerSkillEnable[4] = { false ,false, false, false };
 	bool playerSkillUse[4] = { false, false, false, false };
 	bool aiSkillEnable[4] = { false, false, false, false };
 	bool aiSkillUse[4] = { false, false, false, false };
-	int aiWantToSkill = random() % 4;
+	int aiWantToSkill = 0;
 
 	function<void(int, int, int, int)> playerMouse = [&](int ev, int x, int y, int flags) {
 		if (x >= gamePlayer.display_DeltaX && x <= gamePlayer.display_DeltaX + gamePlayer.display_Size &&
-			y >= gamePlayer.display_DeltaY && y <= gamePlayer.display_DeltaY + gamePlayer.display_Size)
+			y >= gamePlayer.display_DeltaY && y <= gamePlayer.display_DeltaY + gamePlayer.display_Size && lancher_state == GameState::Play)
 		{
 			switch (ev)
 			{
@@ -1448,11 +1502,14 @@ void runBoth()
 
 					rad = -DirectX::XM_PIDIV2 - rad;
 					float deg = (rad - 0.15f + DirectX::XM_PI) / (DirectX::XM_PI - 0.3f);
-					if (deg >= 0 && deg <= 1)
+					//if (deg >= 0 && deg <= 1)
+					if (deg < 0) deg = 0;
+					if (deg > 1) deg = 1;
 					{
 						gamePlayer.action_shoot(deg);
 						gameAI.action_shoot(bestDeg);
 						gamePlayer.guide_enable = false;
+						gameAI.guide_enable = false;
 						load = false;
 					}
 				}
@@ -1541,6 +1598,9 @@ void runBoth()
 					{
 						gamePlayer.Game_Animation = AnimationState::None;
 						gamePlayer.Game_State = State::Die;
+						lancher_state = GameState::GameOver;
+						ranks.insert(pair<int, string>(gamePlayer.Game_Score, initial));
+						saveRank(ranks);
 					}
 				}
 				break;
@@ -1553,13 +1613,13 @@ void runBoth()
 			for (const Log& log : gamePlayer.logs)
 			{
 				if (log.type == BlockType::Block)
-					playerStack += 1 / 3.f / log.y;
+					playerStack += 10 / (1 + log.y / 5.f) / gamePlayer.Game_Balls;
 			}
 			gamePlayer.logs.clear();
 
 			if (playerSkillEnable[0] && playerSkillUse[0])
 			{
-				gamePlayer.Game_Balls /= 2;
+				gamePlayer.Game_Balls /= 3;
 				playerSkillEnable[0] = false;
 				playerSkillUse[0] = false;
 			}
@@ -1587,12 +1647,12 @@ void runBoth()
 			}
 			if (aiSkillEnable[1] && aiSkillUse[1])
 			{
+				gamePlayer.Penalty_disable_GuideLine = false;
 				aiSkillEnable[1] = false;
 				aiSkillUse[1] = false;
 			}
 			if (aiSkillEnable[2] && aiSkillUse[2])
 			{
-				gamePlayer.Penalty_disable_GuideLine = false;
 				aiSkillEnable[2] = false;
 				aiSkillUse[2] = false;
 			}
@@ -1610,11 +1670,17 @@ void runBoth()
 				gamePlayer.action_prepare(data);
 				gameAI.action_prepare(data);
 
-				if (playerSkillEnable[0])
+				if (aiSkillEnable[2])
 				{
-					gamePlayer.Game_Balls *= 2;
-					playerSkillUse[0] = true;
+					for (int x = 0; x < 4; ++x)
+					{
+						if (playerSkillEnable[x] && !playerSkillUse[x])
+						{
+							playerSkillEnable[x] = false;
+						}
+					}
 				}
+
 				if (playerSkillEnable[1])
 				{
 					for (int x = 0; x < Game_Width; ++x)
@@ -1635,9 +1701,12 @@ void runBoth()
 					{
 						for (int x = 0; x < Game_Width; ++x)
 						{
-							Block temp = gameAI.Game_Map[x][y];
-							gameAI.Game_Map[x][y] = gamePlayer.Game_Map[x][y];
-							gamePlayer.Game_Map[x][y] = temp;
+							if (gamePlayer.Game_Map[x][y].type != BlockType::Ball && gameAI.Game_Map[x][y].type != BlockType::Ball)
+							{
+								Block temp = gameAI.Game_Map[x][y];
+								gameAI.Game_Map[x][y] = gamePlayer.Game_Map[x][y];
+								gamePlayer.Game_Map[x][y] = temp;
+							}
 						}
 					}
 					playerSkillUse[2] = true;
@@ -1666,11 +1735,11 @@ void runBoth()
 				}
 				if (aiSkillEnable[1])
 				{
+					gamePlayer.Penalty_disable_GuideLine = true;
 					aiSkillUse[1] = true;
 				}
 				if (aiSkillEnable[2])
 				{
-					gamePlayer.Penalty_disable_GuideLine = true;
 					aiSkillUse[2] = true;
 				}
 				if (aiSkillEnable[3])
@@ -1686,7 +1755,8 @@ void runBoth()
 				for (const Log& log : gamePlayer.logs)
 				{
 					if (log.type == BlockType::Block)
-						playerStack += 1 / 3.f / log.y;
+						playerStack += 10 / (1 + log.y / 5.f) / gamePlayer.Game_Balls;
+
 				}
 				gamePlayer.logs.clear();
 			}
@@ -1694,12 +1764,95 @@ void runBoth()
 		}
 		switch (gameAI.Game_State)
 		{
+		case State::Animation:
+			if (gameAI.Game_t % 40 == 0)
+			{
+				switch (gameAI.Game_Animation)
+				{
+				case AnimationState::GettingDowns:
+				{
+					static int remain;
+					if (gameAI.Game_Animation_Progress == 0.f)
+					{
+						remain = (int)gameAI.display_Size / 9;
+						gameAI.Game_Animation_Progress = 1.f;
+					}
+					gameAI.Game_Animation_Dy += remain / 2;
+					remain /= 2;
+					if (remain == 0)
+					{
+						gameAI.Game_Animation = AnimationState::None;
+						gameAI.Game_State = State::Shoot;
+						gameAI.Game_Animation_Dy = 0;
+
+						for (int x = 0; x < Game_Width; ++x)
+						{
+							Block& block = gameAI.Game_Map[x][Game_Height - 1];
+							switch (block.type)
+							{
+							case BlockType::Ball:
+								++gameAI.Game_Balls;
+								block = Block(BlockType::None, 0);
+								if (gameAI.Flag_effect)
+								{
+									for (int _ = 0; _ < 30; ++_)
+									{
+										float rad = (_ / 15.f) * DirectX::XM_2PI;
+										DirectX::XMFLOAT3 color = { 0, 255, 0 };
+										gameAI.Game_effects.push_back(
+											Effect{
+												100 / 6.f * (x + 0.5f),
+												100 / 9.f * (Game_Height - 1 + 0.5f),
+												2.f,
+												rad,
+												color
+											});
+									}
+								}
+								break;
+							}
+						}
+					}
+
+				}
+				break;
+				case AnimationState::Dying:
+				{
+					static float remain;
+					if (gameAI.Game_Animation_Progress == 0.f)
+					{
+						remain = 0.f;
+						gameAI.Game_Animation_Progress = 1.f;
+					}
+					remain += 0.04f;
+					float mean_higest_color = (highest_color.x + highest_color.y + highest_color.z) / 3;
+					float mean_lowest_color = (lowest_color.x + lowest_color.y + lowest_color.z) / 3;
+					float mean_green_ball_color = (green_ball_color.x + green_ball_color.y + green_ball_color.z) / 3;
+					float mean_blue_ball_color = (blue_ball_color.x + blue_ball_color.y + blue_ball_color.z) / 3;
+					gameAI.lowest_color = blend({ mean_lowest_color , mean_lowest_color , mean_lowest_color }, lowest_color, remain);
+					gameAI.highest_color = blend({ mean_higest_color , mean_higest_color , mean_higest_color }, highest_color, remain);
+					gameAI.green_ball_color = blend({ mean_green_ball_color , mean_green_ball_color , mean_green_ball_color }, green_ball_color, remain);
+					gameAI.blue_ball_color = blend({ mean_blue_ball_color , mean_blue_ball_color , mean_blue_ball_color }, blue_ball_color, remain);
+					if (remain >= 1)
+					{
+						gameAI.Game_Animation = AnimationState::None;
+						gameAI.Game_State = State::Die;
+						lancher_state = GameState::GameOver;
+						ranks.insert(pair<int, string>(gamePlayer.Game_Score, initial));
+						saveRank(ranks);
+					}
+				}
+				break;
+				}
+			}
+			break;
 		case State::Shoot:
 			if (!load)
 			{
 				if (!trd_run)
 				{
 					gameAI.fore_color = { 200.f, 200.f, 200.f };
+					gamePlayer.blue_ball_color = { 100.f, 100.f, 100.f };
 					trd_run = true;
 					trd = thread(getBestDegreedThread, gameAI.exportData(), gameAI.Game_Balls, gameAI.Game_Score, ref(bestDeg), ref(load));
 				}
@@ -1709,6 +1862,9 @@ void runBoth()
 				if (trd_run)
 				{
 					gameAI.fore_color = { 240.f, 240.f, 240.f };
+					gamePlayer.blue_ball_color = blue_ball_color;
+					gameAI.guide_enable = true;
+					gameAI.guide_line = bestDeg;
 					trd_run = false;
 					trd.join();
 				}
@@ -1720,7 +1876,7 @@ void runBoth()
 			for (const Log& log : gameAI.logs)
 			{
 				if (log.type == BlockType::Block)
-					aiStack += 1 / 3.f / log.y;
+					aiStack += 10 / (1 + log.y / 5.f) / gameAI.Game_Balls;
 			}
 			gameAI.logs.clear();
 			break;
@@ -1730,9 +1886,23 @@ void runBoth()
 				for (const Log& log : gameAI.logs)
 				{
 					if (log.type == BlockType::Block)
-						aiStack += 1 / 3.f / log.y;
+						aiStack += 10 / (1 + log.y / 5.f) / gameAI.Game_Balls;
 				}
 				gameAI.logs.clear();
+				
+				if (playerSkillEnable[0] || playerSkillEnable[1] || playerSkillEnable[2] || playerSkillEnable[3])
+					aiWantToSkill = 2;
+
+				if (aiWantToSkill == 2)
+				{
+					if (!(playerSkillEnable[0] || playerSkillEnable[1] || playerSkillEnable[2] || playerSkillEnable[3]))
+					{
+						do {
+							aiWantToSkill = random() % 4;
+						} while (aiWantToSkill == 2);
+					}
+				}
+			
 				if (aiSkillCost[aiWantToSkill] <= aiStack && !aiSkillEnable[aiWantToSkill])
 				{
 					aiStack -= aiSkillCost[aiWantToSkill];
@@ -1744,10 +1914,57 @@ void runBoth()
 		}
 		gamePlayer.loop();
 		gameAI.loop();
+
+		if (lancher_state == GameState::Login)
+		{
+			switch (gameBackground.Game_State)
+			{
+			case State::Shoot:
+				gameBackground.action_shoot((random() % 129) / 128.f);
+				break;
+			case State::Result:
+				gameBackground.Game_State = State::Prepare;
+				break;
+			case State::Die:
+				gameBackground.initialize();
+				break;
+			}
+			gameBackground.loop();
+		}
 		if (gamePlayer.Game_t % 40 == 0)
 		{
 			gamePlayer.draw(windPlayer);
-			gameAI.draw(windAI);
+			if (lancher_state == GameState::Login)
+			{
+				gameBackground.draw(windAI);
+				const static array<string, 7> order_num = {
+					"1ST", "2ND", "3RD", "4th", "5th", "6th", "7th"
+				};
+
+				auto itr = ranks.cbegin();
+				for (int y = 0; y < 7; ++y)
+				{
+					{
+						char buf[8] = "___    ";
+						
+						if (itr != ranks.cend())
+							sprintf_s(buf, "%3s %3d", itr->second, itr->first);
+						
+
+						const cv::String str = order_num[y] + " " + buf;
+						const cv::Size& size = cv::getTextSize(str, cv::HersheyFonts::FONT_HERSHEY_DUPLEX, y < 3 ? 2.f : 1.5f, 4.f, nullptr);
+						cv::putText(wind, str, cv::Point(
+							displayAI.x + displayAI.width / 2 - size.width / 2,
+							displayAI.y + (y + 1.5f) * displayAI.height / 8 - size.height / 4),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, y < 3 ? 2.f : 1.5f, cv::Scalar(40, 40, 40), 4.f);
+					}
+					if (ranks.cend() != itr) ++itr;
+				}
+			}
+			else
+			{
+				gameAI.draw(windAI);
+			}
 
 			{
 				cv::Mat(wind, cv::Rect(0, 0, 1920, 100)) = cv::Scalar(255, 255, 255);
@@ -1804,7 +2021,7 @@ void runBoth()
 					cv::putText(wind, qwer[x], cv::Point(90 + playerSkillCost[x], 939 + size.height / 2),
 						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, cv::Scalar(200, 200, 200), 2.f, cv::LINE_AA);
 
-					cv::rectangle(wind, cv::Rect(89.6f + (89.6f + 128.f) * x, 770, 128, 128), playerSkillEnable[x] ? cv::Scalar(0, 238, 244) : (aiSkillUse[1] ? cv::Scalar(0, 0, 255) :(playerStack >= playerSkillCost[x] ? cv::Scalar(100, 200, 100) : cv::Scalar(128, 128, 128))), 5, cv::LINE_AA);
+					cv::rectangle(wind, cv::Rect(89.6f + (89.6f + 128.f) * x, 770, 128, 128), playerSkillEnable[x] ? cv::Scalar(0, 238, 244) : (aiSkillUse[2] ? cv::Scalar(0, 0, 255) :(playerStack >= playerSkillCost[x] ? cv::Scalar(100, 200, 100) : cv::Scalar(128, 128, 128))), 5, cv::LINE_AA);
 				}
 
 				cv::rectangle(wind, cv::Rect(1047, 920, 787, 40), cv::Scalar(80, 80, 80), cv::FILLED, cv::LINE_AA);
@@ -1821,74 +2038,156 @@ void runBoth()
 
 			}
 
+			if (lancher_state == GameState::Login)
+			{
+				{
+					char buf[256];
+					sprintf_s(buf, "Type Initial : %c%c%c",
+						initial_cursor > 0 ? initial[0] : '_',
+						initial_cursor > 1 ? initial[1] : '_',
+						initial_cursor > 2 ? initial[2] : '_');
+					const cv::String str = buf;
+					const cv::Size& size = cv::getTextSize(str, cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, 4.f, nullptr);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2, displayPlayer.y + displayPlayer.height / 2 + size.height / 2),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, cv::Scalar(40, 40, 40), 4.f);
+				}
+
+				if (initial_cursor == 3 && (gameAI.Game_t / 1600) % 2 == 0)
+				{
+					const cv::String str = "PRESS ENTER TO START";
+					const cv::Size& size = cv::getTextSize(str, cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, 2.f, nullptr);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2, displayPlayer.y + displayPlayer.height * 5 / 8 + size.height / 2),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, cv::Scalar(40, 40, 40), 2.f);
+				}
+			}
+			if (lancher_state == GameState::GameOver)
+			{
+				{
+					const cv::String str = "Game Over";
+					const cv::Size& size = cv::getTextSize(str, cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, 4.f, nullptr);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2 + 3, displayPlayer.y + displayPlayer.height / 2 - size.height / 4 + 3),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, cv::Scalar(40, 40, 40), 6.f);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2, displayPlayer.y + displayPlayer.height / 2 - size.height / 4),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, cv::Scalar(255, 255, 255), 4.f);
+				}
+				{
+					const cv::String str = "Total Score : " +  to_string(gamePlayer.Game_Score);
+					const cv::Size& size = cv::getTextSize(str, cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, 4.f, nullptr);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2 + 3, displayPlayer.y + displayPlayer.height / 2 + size.height * 5 / 4 + 3),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, cv::Scalar(40, 40, 40), 6.f, cv::LINE_AA);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2, displayPlayer.y + displayPlayer.height / 2 + size.height * 5 / 4),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, cv::Scalar(255, 255, 255), 4.f, cv::LINE_AA);
+				}
+			}
+
 
 			cv::imshow("mainWindow", wind);
 			char input = cv::waitKey(1);
 			
-			if (!trd_run)
+			if (lancher_state == GameState::Play)
 			{
-				switch (input)
+				if (!trd_run)
 				{
-				case 27:
-					gamePlayer.Flag_run = false;
-					break;
-				case '1'://1
-					if (!trd_run)
+					switch (input)
 					{
-						for (int x = 0; x < 4; ++x)
+					case 27:
+						gamePlayer.Flag_run = false;
+						break;
+					case '0'://0
+						if (!trd_run)
 						{
-							playerSkillEnable[x] = false;
-							playerSkillUse[x] = false;
-							playerStack = 0;
+							for (int x = 0; x < 4; ++x)
+							{
+								playerSkillEnable[x] = false;
+								playerSkillUse[x] = false;
+								playerStack = 0;
 
-							aiSkillEnable[x] = false;
-							aiSkillUse[x] = false;
-							aiStack = 0;
+								aiSkillEnable[x] = false;
+								aiSkillUse[x] = false;
+								aiStack = 0;
+							}
+
+							gamePlayer.Flag_roofOff = false;
+							gamePlayer.Penalty_disable_BlockNumber = false;
+							gamePlayer.Penalty_disable_GuideLine = false;
+
+							gamePlayer.initialize();
+							gamePlayer.Game_shootBalls.clear();
+
+							gameAI.initialize();
+							gameAI.Game_shootBalls.clear();
+
+							gamePlayer.highest_color = highest_color;
+							gamePlayer.lowest_color = lowest_color;
+							gamePlayer.green_ball_color = green_ball_color;
+							gamePlayer.blue_ball_color = blue_ball_color;
 						}
-
-						gamePlayer.Flag_roofOff = false;
-						gamePlayer.Penalty_disable_BlockNumber = false;
-						gamePlayer.Penalty_disable_GuideLine = false;
-
-						gamePlayer.initialize();
-						gamePlayer.Game_shootBalls.clear();
-
-						gameAI.initialize();
-						gameAI.Game_shootBalls.clear();
+						break;
+					case 'q':
+						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result && gamePlayer.Game_State != State::Shooting) && !(playerSkillEnable[0]) && playerSkillCost[0] <= playerStack && !aiSkillUse[2])
+						{
+							playerSkillEnable[0] = true;
+							playerSkillUse[0] = true;
+							gamePlayer.Game_Balls *= 3;
+							playerStack -= playerSkillCost[0];
+						}
+						break;
+					case 'w':
+						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[1]) && playerSkillCost[1] <= playerStack && !aiSkillUse[2])
+						{
+							playerSkillEnable[1] = true;
+							playerSkillUse[1] = false;
+							playerStack -= playerSkillCost[1];
+						}
+						break;
+					case 'e':
+						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[2]) && playerSkillCost[2] <= playerStack && !aiSkillUse[2])
+						{
+							playerSkillEnable[2] = true;
+							playerSkillUse[2] = false;
+							playerStack -= playerSkillCost[2];
+						}
+						break;
+					case 'r':
+						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[3]) && playerSkillCost[3] <= playerStack && !aiSkillUse[2])
+						{
+							playerSkillEnable[3] = true;
+							playerSkillUse[3] = false;
+							playerStack -= playerSkillCost[3];
+						}
+						break;
 					}
-					break;
-				case 'q':
-					if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[0]) && playerSkillCost[0] <= playerStack && !aiSkillUse[1])
-					{
-						playerSkillEnable[0] = true;
-						playerSkillUse[0] = false;
-						playerStack -= playerSkillCost[0];
-					}
-					break;
-				case 'w':
-					if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[1]) && playerSkillCost[1] <= playerStack && !aiSkillUse[1])
-					{
-						playerSkillEnable[1] = true;
-						playerSkillUse[1] = false;
-						playerStack -= playerSkillCost[1];
-					}
-					break;
-				case 'e':
-					if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[2]) && playerSkillCost[2] <= playerStack && !aiSkillUse[1])
-					{
-						playerSkillEnable[2] = true;
-						playerSkillUse[2] = false;
-						playerStack -= playerSkillCost[2];
-					}
-					break;
-				case 'r':
-					if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[3]) && playerSkillCost[3] <= playerStack && !aiSkillUse[1])
-					{
-						playerSkillEnable[3] = true;
-						playerSkillUse[3] = false;
-						playerStack -= playerSkillCost[3];
-					}
-					break;
+				}
+			}
+			else if (lancher_state == GameState::Login)
+			{
+				if (input >= 'a' && input <= 'z' && initial_cursor < 3)
+				{
+					initial[initial_cursor++] = input - 'a' + 'A';
+				}
+				if (input >= 'A' && input <= 'Z' && initial_cursor < 3)
+				{
+					initial[initial_cursor++] = input;
+				}
+				if (input == 8 && initial_cursor > 0)
+				{
+					--initial_cursor;
+				}
+				if (input == 27)
+				{
+					gamePlayer.Flag_run = false;
+				}
+				if (input == 13 && initial_cursor == 3  && !trd_run)
+				{
+					lancher_state = GameState::Play;
+					initial_cursor = 0;
+				}
+			}
+			else if (lancher_state == GameState::GameOver)
+			{
+				if (input == 13)
+				{
+					lancher_state = GameState::Login;
 				}
 			}
 		}
