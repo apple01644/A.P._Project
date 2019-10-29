@@ -544,102 +544,15 @@ class SBBGame:
             pygame.quit()
 
 if __name__ == '__main__':
-
+    
     game = SBBGame()
-    game.custom_state = True
-    game.user = False
-    game.ui = True
     game.start()
-    game.ui = False
+    game.ui_start()
 
-    saved_map = {}
-    saved_map['x'] = 50
-    saved_map['balls'] = 10
-    saved_map['num_map'] = [
-        [0, 0, 0, 0, 0, 0],
-        [1, 1, 1, 1, 1, 1],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0]
-    ]
-    saved_map['type_map'] = [
-        [0, 0, 0, 0, 0, 0],
-        [1, 1, -1, 1, 1, 1],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0]
-    ]
-
-    best = {'deg' : -1, 'gage' : 0}
-    shoot_deg = 0
     t = 0
     while game.Run:
-        
-        if game.Game['State'] == 'prepare':
-            game.fromData(saved_map)
-        elif game.Game['State'] == 'shoot':
-            print('Stage %d of 16' % shoot_deg)
-            game.action_Shoot(shoot_deg / 16)
-        elif game.Game['State'] == 'result':
-            result = game.get_result()
-            if result[0] > best['gage'] and result[1] == 0:
-                best['gage'] = game.score
-                best['deg'] = shoot_deg
-            shoot_deg += 1
-            if shoot_deg == 16:
-                shoot_deg = 0
-
-                game.Game['State'] = 'cleanup'
-                game.loop(t)
-                game.ui = True
-                while True:
-                    if game.Game['State'] == 'prepare':
-                        game.fromData(saved_map)
-                    elif game.Game['State'] == 'shoot':
-                        game.action_Shoot(best['deg'] / 16)
-                    elif game.Game['State'] == 'result':
-                        break                 
-                    game.loop(t)
-                    t += 1
-                game.ui = False
-
-
-                print('\nBest Deg is %d, %3.2f' % (best['deg'], best['gage']))
-                best = {'deg' : -1, 'gage' : 0}
-
-                custom_score = random.randint(1, 15)
-                for y in range(9):
-                    ball_able = True
-                    for x in range(6):
-                        saved_map['type_map'][y][x] = 0
-                        saved_map['num_map'][y][x] = 0
-
-                        if custom_score + 1 - y > 0 and y > 0 and y < 8:
-                            if random.random() < 0.3:
-                                saved_map['type_map'][y][x] = 1
-                                if y == 1:
-                                    saved_map['num_map'][y][x] = custom_score
-                                else:
-                                    saved_map['num_map'][y][x] = random.randint(1, custom_score + 1 - y)
-                            elif random.random() < 1 / 5 * x and ball_able:
-                                saved_map['type_map'][y][x] = -1
-                                ball_able = False
-            else:
-                game.Game['State'] = 'cleanup'
-    
         game.loop(t)
         t += 1
-
-    game.close()
-
     
 
 
