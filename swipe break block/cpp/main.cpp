@@ -477,8 +477,10 @@ public:
 
 									if (passed[0][point.x] && passed[1][point.y])
 									{
-										Point<float>vec{ nearest.x - ball.x, nearest.y - ball.y };
-										float rad_C2P = atan2f(vec.y, vec.x) + DirectX::XM_PIDIV2;
+										Point<float>vec{ ball.x - nearest.x, ball.y - nearest.y };
+										float new_rad = atan2f(vec.y, vec.x);
+
+										/*float rad_C2P = atan2f(vec.y, vec.x) + DirectX::XM_PIDIV2;
 										float rad = atan2f(ball.vx, ball.vy);
 										float length = sqrtf(powf(ball.vy, 2) + powf(ball.vx, 2));
 										float new_rad = -(rad - rad_C2P) + rad_C2P;
@@ -502,7 +504,9 @@ public:
 										if (new_rad >= -DirectX::XM_PI && new_rad < 0.15 - DirectX::XM_PI)
 										{
 											new_rad = 0.15f - DirectX::XM_PI;
-										}
+										}*/
+
+										
 
 										ball.vx = cosf(new_rad);
 										ball.vy = sinf(new_rad);
@@ -580,9 +584,9 @@ public:
 									if (Flag_effect)
 									{
 										DirectX::XMFLOAT3 color = blend(highest_color, lowest_color, Game_Map[x][y].num / (float)Game_Score);
-										for (int _ = 0; _ < 30; ++_)
+										for (int _ = 0; _ < 15; ++_)
 										{
-											float rad = (_ / 15.f) * DirectX::XM_2PI;
+											float rad = (_ / 7.5f) * DirectX::XM_2PI;
 											Game_effects.push_back(
 												Effect{
 													100 / 6.f * (x + 0.5f),
@@ -608,9 +612,9 @@ public:
 								logs.push_back(Log{x, y, 0, BlockType::Ball});
 								if (Flag_effect)
 								{
-									for (int _ = 0; _ < 30; ++_)
+									for (int _ = 0; _ < 15; ++_)
 									{
-										float rad = (_ / 15.f) * DirectX::XM_2PI;
+										float rad = (_ / 7.5f) * DirectX::XM_2PI;
 										DirectX::XMFLOAT3 color = { 0, 255, 0 };
 										Game_effects.push_back(
 											Effect{
@@ -683,9 +687,9 @@ public:
 					
 					if (Flag_effect && Game_effects.size() < 0xff)
 					{
-						for (int _ = 0; _ < 30; ++_)
+						for (int _ = 0; _ < 15; ++_)
 						{
-							float rad = (_ / 15.f) * DirectX::XM_2PI;
+							float rad = (_ / 7.5f) * DirectX::XM_2PI;
 							DirectX::XMFLOAT3 color = blue_ball_color;
 							Game_effects.push_back(
 								Effect{
@@ -704,9 +708,9 @@ public:
 			else
 				if (Flag_effect && Game_effects.size() < 0xff)
 				{
-					for (int _ = 0; _ < 30; ++_)
+					for (int _ = 0; _ < 15; ++_)
 					{
-						float rad = (_ / 15.f) * DirectX::XM_2PI;
+						float rad = (_ / 7.5f) * DirectX::XM_2PI;
 						DirectX::XMFLOAT3 color = blue_ball_color;
 						Game_effects.push_back(
 							Effect{
@@ -727,9 +731,9 @@ public:
 			{
 				if (Flag_effect && Game_effects.size() < 0xff)
 				{
-					for (int _ = 0; _ < 30; ++_)
+					for (int _ = 0; _ < 15; ++_)
 					{
-						float rad = (_ / 15.f) * DirectX::XM_2PI;
+						float rad = (_ / 7.5f) * DirectX::XM_2PI;
 						DirectX::XMFLOAT3 color = blue_ball_color;
 						Game_effects.push_back(
 							Effect{
@@ -744,7 +748,28 @@ public:
 			}
 			Game_shootBalls.clear();
 		}
-		if (max_y == 0.f) Game_shootBalls.clear();
+		if (max_y == 0.f) {
+			for (const Ball& ball : Game_shootBalls)
+			{
+				if (Flag_effect)
+				{
+					for (int _ = 0; _ < 15; ++_)
+					{
+						float rad = (_ / 7.5f) * DirectX::XM_2PI;
+						DirectX::XMFLOAT3 color = blue_ball_color;
+						Game_effects.push_back(
+							Effect{
+								ball.x,
+								ball.y,
+								2.f,
+								rad,
+								color
+							});
+					}
+				}
+			}
+			Game_shootBalls.clear();
+		}
 	}
 
 	void draw(cv::Mat& mat) {
@@ -1638,9 +1663,9 @@ void runBoth()
 								block = Block(BlockType::None, 0);
 								if (gamePlayer.Flag_effect)
 								{
-									for (int _ = 0; _ < 30; ++_)
+									for (int _ = 0; _ < 15; ++_)
 									{
-										float rad = (_ / 15.f) * DirectX::XM_2PI;
+										float rad = (_ / 7.5f) * DirectX::XM_2PI;
 										DirectX::XMFLOAT3 color = { 0, 255, 0 };
 										gamePlayer.Game_effects.push_back(
 											Effect{
@@ -1882,9 +1907,9 @@ void runBoth()
 								block = Block(BlockType::None, 0);
 								if (gameAI.Flag_effect)
 								{
-									for (int _ = 0; _ < 30; ++_)
+									for (int _ = 0; _ < 15; ++_)
 									{
-										float rad = (_ / 15.f) * DirectX::XM_2PI;
+										float rad = (_ / 7.5f) * DirectX::XM_2PI;
 										DirectX::XMFLOAT3 color = { 0, 255, 0 };
 										gameAI.Game_effects.push_back(
 											Effect{
