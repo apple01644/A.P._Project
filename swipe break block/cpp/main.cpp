@@ -58,8 +58,8 @@ enum class GameState {
 struct Block {
 	BlockType type = BlockType::None;
 	int num = 0;
-	int lastHitId = -1;
-	uint64_t lastHitTime = -1;
+	unordered_map<int, uint32_t> lastHit;
+	uint32_t lastHitTime;
 	Block() {}
 	Block(const BlockType& type, const int& num) : type(type), num(num) {
 
@@ -69,6 +69,7 @@ struct Block {
 struct Ball {
 	float x, y, vx, vy;
 	int id;
+	bool hitted = false;
 };
 
 struct Rect {
@@ -176,7 +177,7 @@ array<float, Game_Width> create_BoardHeader(const int Game_Score)
 	{
 		if (ret[x] == 0.f)
 		{
-			if (random() % 100 < 50 + Game_Score)
+			if (random() % 100 < 50 + Game_Score * 2)
 			{
 				ret[x] = 1.f;
 				if (--left_ball == 0) break;
@@ -209,10 +210,11 @@ public:
 
 	bool Flag_user = false;
 	bool Flag_custom_state = false;
-	bool Flag_effect = true;
+	bool Flag_effect = false;
 	bool Flag_run = true;
 	bool Flag_animation = false;
 	bool Flag_roofOff = false;
+	bool Flag_under_clear = false;
 
 	bool Penalty_disable_BlockNumber = false;
 	bool Penalty_disable_GuideLine = false;
@@ -230,6 +232,7 @@ public:
 	float display_DeltaX = 0;
 	float display_DeltaY = 0;
 	float display_Size = 640;
+	float round_width = 0.1f;
 
 	DirectX::XMFLOAT3 highest_color = { 230.f,   5.f,   0.f };
 	DirectX::XMFLOAT3  lowest_color = { 253.f, 204.f,  77.f };
@@ -278,8 +281,7 @@ public:
 				Block& block = Game_Map[x][y];
 				if (block.type != BlockType::None)
 				{
-					block.lastHitId = -1;
-					block.lastHitTime = 0;
+					block.lastHit.clear();
 					Game_Map[x][y + 1] = block;
 					block = Block(BlockType::None, 0);
 				}
@@ -434,144 +436,144 @@ public:
 					case BlockType::Block:
 						if (Collision_Rect_Circle(Rect{ x * 100 / 6.f, y * 100 / 9.f, 100 / 6.f, 100 / 9.f }, Circle{ ball.x, ball.y, ball_rad }))
 						{
-							if ((ball.y > (y * 100 / 9.f + 0.1f) + (100 / 9.f - 0.2f) || ball.y < (y * 100 / 9.f + 0.1f)) &&
-								(ball.x > (x * 100 / 6.f + 0.1f) + (100 / 6.f - 0.2f) || ball.x < (x * 100 / 6.f + 0.1f)))
+							if (const auto itr = block.lastHit.find(ball.id);(itr == block.lastHit.end() || itr->second + 1.5f / dt < Game_t) && block.num > 0)
 							{
-								Point<float> nearest;
-								Point<int> point;
-
-								if (ball.x > (x * 100 / 6.f + 1) + (100 / 6.f - 2) / 2)
+								if ((ball.y > ((y + 1) * 100 / 9.f - round_width) || ball.y < (y * 100 / 9.f + round_width)) &&
+									(ball.x > ((x + 1) * 100 / 6.f - round_width) || ball.x < (x * 100 / 6.f + round_width)))
 								{
-									nearest.x = (x * 100 / 6.f + 1) + (100 / 6.f - 2);
-									point.x = 1;
-								}
-								else
-								{
-									nearest.x = (x * 100 / 6.f + 1);
-									point.x = 0;
-								}
+									Point<float> nearest;
+									Point<int> point;
 
-								if (ball.y > (y * 100 / 9.f + 1) + (100 / 9.f - 2) / 2)
-								{
-									nearest.y = (y * 100 / 9.f + 1) + (100 / 9.f - 2);
-									point.y = 1;
-								}
-								else
-								{
-									nearest.y = (y * 100 / 9.f + 1);
-									point.y = 0;
-								}
-
-
-								bool passed[2][2];
-
-								passed[0][0] = ((0 <= x - 1) && (x - 1 < 6) && (Game_Map[x - 1][y].type != BlockType::Block));
-								passed[0][1] = ((0 <= x + 1) && (x + 1 < 6) && (Game_Map[x + 1][y].type != BlockType::Block));
-
-								passed[1][0] = ((0 <= y - 1) && (y - 1 < 9) && (Game_Map[x][y - 1].type != BlockType::Block));
-								passed[1][1] = ((0 <= y + 1) && (y + 1 < 9) && (Game_Map[x][y + 1].type != BlockType::Block));
-
-								if (passed[0][point.x] && passed[1][point.y])
-								{
-									Point<float>vec{ nearest.x - ball.x, nearest.y - ball.y };
-									float rad_C2P = atan2f(vec.y, vec.x) + DirectX::XM_PIDIV2;
-									float rad = atan2f(ball.vx, ball.vy);
-									float length = sqrtf(powf(ball.vy, 2) + powf(ball.vx, 2));
-									float new_rad = -(rad - rad_C2P) + rad_C2P;
-
-									while (new_rad < DirectX::XM_PI)
-										new_rad += DirectX::XM_2PI;
-									new_rad -= DirectX::XM_2PI;
-
-									if (new_rad >= 0.f && new_rad < 0.15f)
+									if (ball.x > (x + 1) * 100 / 6.f - round_width)
 									{
-										new_rad = 0.15f;
+										nearest.x = (x + 1) * 100 / 6.f - round_width;
+										point.x = 1;
 									}
-									if (new_rad >= -0.15f && new_rad < 0.f)
+									else
 									{
-										new_rad = -0.15f;
-									}
-									if (new_rad >= DirectX::XM_PI - 0.15f && new_rad < DirectX::XM_PI)
-									{
-										new_rad = DirectX::XM_PI - 0.15f;
-									}
-									if (new_rad >= -DirectX::XM_PI && new_rad < 0.15 - DirectX::XM_PI)
-									{
-										new_rad = 0.15f - DirectX::XM_PI;
+										nearest.x = x * 100 / 6.f + round_width;
+										point.x = 0;
 									}
 
-									ball.vx = cosf(new_rad);
-									ball.vy = sinf(new_rad);
-								}
-								else
-								{
-									int side = -1;//East, North, West, South
-									switch (point.x)
+									if (ball.y > (y + 1) * 100 / 9.f - round_width)
 									{
-									case 1:
-										switch (point.y)
+										nearest.y = (y + 1) * 100 / 9.f - round_width;
+										point.y = 1;
+									}
+									else
+									{
+										nearest.y = y * 100 / 9.f + round_width;
+										point.y = 0;
+									}
+
+
+									bool passed[2][2];
+
+									passed[0][0] = ((0 <= x - 1) && (Game_Map[x - 1][y].type != BlockType::Block));
+									passed[0][1] = ((x + 1 < 6) && (Game_Map[x + 1][y].type != BlockType::Block));
+
+									passed[1][0] = ((0 <= y - 1) && (Game_Map[x][y - 1].type != BlockType::Block));
+									passed[1][1] = ((y + 1 < 9) && (Game_Map[x][y + 1].type != BlockType::Block));
+
+									if (passed[0][point.x] && passed[1][point.y])
+									{
+										Point<float>vec{ nearest.x - ball.x, nearest.y - ball.y };
+										float rad_C2P = atan2f(vec.y, vec.x) + DirectX::XM_PIDIV2;
+										float rad = atan2f(ball.vx, ball.vy);
+										float length = sqrtf(powf(ball.vy, 2) + powf(ball.vx, 2));
+										float new_rad = -(rad - rad_C2P) + rad_C2P;
+
+										while (new_rad < DirectX::XM_PI)
+											new_rad += DirectX::XM_2PI;
+										new_rad -= DirectX::XM_2PI;
+
+										if (new_rad >= 0.f && new_rad < 0.15f)
+										{
+											new_rad = 0.15f;
+										}
+										if (new_rad >= -0.15f && new_rad < 0.f)
+										{
+											new_rad = -0.15f;
+										}
+										if (new_rad >= DirectX::XM_PI - 0.15f && new_rad < DirectX::XM_PI)
+										{
+											new_rad = DirectX::XM_PI - 0.15f;
+										}
+										if (new_rad >= -DirectX::XM_PI && new_rad < 0.15 - DirectX::XM_PI)
+										{
+											new_rad = 0.15f - DirectX::XM_PI;
+										}
+
+										ball.vx = cosf(new_rad);
+										ball.vy = sinf(new_rad);
+									}
+									else
+									{
+										int side = -1;//East, North, West, South
+										switch (point.x)
 										{
 										case 1:
-											if (!passed[0][1]) side = 3;
-											else if (!passed[1][1]) side = 0;
+											switch (point.y)
+											{
+											case 1:
+												if (!passed[0][1]) side = 3;
+												else if (!passed[1][1]) side = 0;
+												break;
+											case 0:
+												if (!passed[0][1]) side = 1;
+												else if (!passed[1][0]) side = 0;
+												break;
+											}
 											break;
 										case 0:
-											if (!passed[0][1]) side = 1;
-											else if (!passed[1][0]) side = 0;
+											switch (point.y)
+											{
+											case 1:
+												if (!passed[0][0]) side = 3;
+												else if (!passed[1][1]) side = 2;
+												break;
+											case 0:
+												if (!passed[0][0]) side = 1;
+												else if (!passed[1][0]) side = 2;
+												break;
+											}
 											break;
 										}
-										break;
-									case 0:
-										switch (point.y)
-										{
-										case 1:
-											if (!passed[0][0]) side = 3;
-											else if (!passed[1][1]) side = 2;
-											break;
-										case 0:
-											if (!passed[0][0]) side = 1;
-											else if (!passed[1][0]) side = 2;
-											break;
-										}
-										break;
-									}
 
-									switch (side)
-									{
-									case 0:
-										ball.vx = abs(ball.vx);
-										break;
-									case 1:
-										ball.vy = -abs(ball.vy);
-										break;
-									case 2:
-										ball.vx = -abs(ball.vx);
-										break;
-									case 3:
+										switch (side)
+										{
+										case 0:
+											ball.vx = abs(ball.vx);
+											break;
+										case 1:
+											ball.vy = -abs(ball.vy);
+											break;
+										case 2:
+											ball.vx = -abs(ball.vx);
+											break;
+										case 3:
+											ball.vy = abs(ball.vy);
+											break;
+										}
+									}
+								}
+								else
+								{
+									Point<float> vec{ ball.x - (x + 0.5f) * 100 / 6, ball.y - (y + 0.5f) * 100 / 9};
+									float rad = atan2f(vec.y, vec.x) / DirectX::XM_PI;
+									if (rad >= 1.f / 4 && rad < 3.f / 4)
 										ball.vy = abs(ball.vy);
-										break;
-									}
+									else if (rad >= 3.f / 4 || rad < -3.f / 4)
+										ball.vx = -abs(ball.vx);
+									else if (rad >= -3.f / 4 && rad < -1.f / 4)
+										ball.vy = -abs(ball.vy);
+									else if (rad >= -1.f / 4 || rad < 1.f / 4)
+										ball.vx = abs(ball.vx);
 								}
-							}
-							else
-							{
-								Point<float> vec{ ball.x - (x + 0.5f) * 100 / 6, ball.y - (y + 0.5f) * 100 / 9};
-								float rad = atan2f(vec.y, vec.x) / DirectX::XM_PI;
-								if (rad >= 1.f / 4 && rad < 3.f / 4)
-									ball.vy = abs(ball.vy);
-								else if (rad >= 3.f / 4 || rad < -3.f / 4)
-									ball.vx = -abs(ball.vx);
-								else if (rad >= -3.f / 4 && rad < -1.f / 4)
-									ball.vy = -abs(ball.vy);
-								else if (rad >= -1.f / 4 || rad < 1.f / 4)
-									ball.vx = abs(ball.vx);
-							}
 
-							if ((block.lastHitId != ball.id || block.lastHitTime + 1.5f / dt < Game_t) && block.num > 0)
-							{
 								--block.num;
 								logs.push_back(Log{ x, y, block.num, BlockType::Block });
-								block.lastHitId = ball.id;
+								block.lastHit[ball.id] = Game_t;
 								block.lastHitTime = Game_t;
 								if (block.num == 0)
 								{
@@ -593,6 +595,8 @@ public:
 									}
 								}
 							}
+							else if (itr != block.lastHit.end()) itr->second = Game_t;
+							ball.hitted = true;
 						}
 						break;
 					case BlockType::Ball:
@@ -625,6 +629,7 @@ public:
 				}
 		}
 
+		float max_y = 0.f;
 		for (int x = 0; x < Game_Width; ++x)
 			for (int y = 0; y < Game_Height; ++y)
 			{
@@ -636,6 +641,8 @@ public:
 					{
 						block.type = BlockType::None;
 					}
+					else if (float value = 100.f * (y + 1) / Game_Height; value > max_y)
+							max_y = value;		
 					break;
 				case BlockType::Ball:
 					if (block.num <= 0)
@@ -643,6 +650,8 @@ public:
 						block.type = BlockType::None;
 						++Game_Balls;
 					}
+					else if (float value = 100.f * (y + 1) / Game_Height; value > max_y)
+						max_y = value;
 					break;
 				}
 			}
@@ -650,11 +659,16 @@ public:
 		vector<Ball> balls;
 		balls.swap(Game_shootBalls);
 
+		bool clear_balls_by_nohit = false;
+		bool clear_balls_by_under = true;
+
 		for (Ball& ball : balls)
 		{
 			if (ball.y <= Game_Y && (ball.y >= ball_rad * 1.5f || !Flag_roofOff))
 			{
 				Game_shootBalls.push_back(ball);
+				if (ball.vy < 0) clear_balls_by_under = false;
+				else if (ball.y < max_y) clear_balls_by_under = false;
 			}
 			else if (!Game_groundBall)
 			{
@@ -666,9 +680,71 @@ public:
 				{
 					Game_groundBall = true;
 					Game_NX = ball.x;
+					
+					if (Flag_effect && Game_effects.size() < 0xff)
+					{
+						for (int _ = 0; _ < 30; ++_)
+						{
+							float rad = (_ / 15.f) * DirectX::XM_2PI;
+							DirectX::XMFLOAT3 color = blue_ball_color;
+							Game_effects.push_back(
+								Effect{
+									ball.x - cosf(rad) * ball_rad,
+									ball.y - sinf(rad) * ball_rad,
+									2.f,
+									rad,
+									color
+								});
+						}
+					}
+
+					if (!ball.hitted) clear_balls_by_nohit = true;
 				}
 			}
+			else
+				if (Flag_effect && Game_effects.size() < 0xff)
+				{
+					for (int _ = 0; _ < 30; ++_)
+					{
+						float rad = (_ / 15.f) * DirectX::XM_2PI;
+						DirectX::XMFLOAT3 color = blue_ball_color;
+						Game_effects.push_back(
+							Effect{
+								ball.x - cosf(rad),
+								ball.y - sinf(rad),
+								2.f,
+								rad,
+								color
+							});
+					}
+				}
 		}
+		if (clear_balls_by_nohit) {
+			Game_LeftBalls = 0;
+		}
+		if (clear_balls_by_under && Game_shootBalls.size() > 0 && Game_LeftBalls == 0 && Flag_under_clear) {
+			for (const Ball& ball : Game_shootBalls)
+			{
+				if (Flag_effect && Game_effects.size() < 0xff)
+				{
+					for (int _ = 0; _ < 30; ++_)
+					{
+						float rad = (_ / 15.f) * DirectX::XM_2PI;
+						DirectX::XMFLOAT3 color = blue_ball_color;
+						Game_effects.push_back(
+							Effect{
+								ball.x - cosf(rad),
+								ball.y - sinf(rad),
+								2.f,
+								rad,
+								color
+							});
+					}
+				}
+			}
+			Game_shootBalls.clear();
+		}
+		if (max_y == 0.f) Game_shootBalls.clear();
 	}
 
 	void draw(cv::Mat& mat) {
@@ -747,9 +823,9 @@ public:
 						Block& block = Game_Map[x][y];
 						if (block.type== BlockType::Block)
 							if (Collision_Rect_Circle(Rect{ x * 100 / 6.f, y * 100 / 9.f, 100 / 6.f, 100 / 9.f }, Circle{ pt.x, pt.y, ball_rad }))
-							{
-								if ((pt.y > (y * 100 / 9.f + 0.1f) + (100 / 9.f - 0.2f) || pt.y < (y * 100 / 9.f + 0.1f)) &&
-									(pt.x > (x * 100 / 6.f + 0.1f) + (100 / 6.f - 0.2f) || pt.x < (x * 100 / 6.f + 0.1f)))
+							{				
+								if ((pt.y > ((y + 1) * 100 / 9.f - round_width) || pt.y < (y * 100 / 9.f + round_width)) &&
+									(pt.x > ((x + 1) * 100 / 6.f - round_width) || pt.x < (x * 100 / 6.f + round_width)))
 								{
 									Point<float> nearest;
 									Point<int> point;
@@ -779,11 +855,10 @@ public:
 
 									bool passed[2][2];
 
-									passed[0][0] = ((0 <= x - 1) && (x - 1 < 6) && (Game_Map[x - 1][y].type != BlockType::Block));
-									passed[0][1] = ((0 <= x + 1) && (x + 1 < 6) && (Game_Map[x + 1][y].type != BlockType::Block));
-
-									passed[1][0] = ((0 <= y - 1) && (y - 1 < 9) && (Game_Map[x][y - 1].type != BlockType::Block));
-									passed[1][1] = ((0 <= y + 1) && (y + 1 < 9) && (Game_Map[x][y + 1].type != BlockType::Block));
+									passed[0][0] = ((0 <= x - 1) && (Game_Map[x - 1][y].type != BlockType::Block));
+									passed[0][1] = ((x + 1 < 6) && (Game_Map[x + 1][y].type != BlockType::Block));
+									passed[1][0] = ((0 <= y - 1) && (Game_Map[x][y - 1].type != BlockType::Block));
+									passed[1][1] = ((y + 1 < 9) && (Game_Map[x][y + 1].type != BlockType::Block));
 
 									if (passed[0][point.x] && passed[1][point.y])
 									{
@@ -910,7 +985,7 @@ public:
 			for (int x = 0; x < 16; ++x)
 			{
 				cv::line(mat, cv::Point(0, y), cv::Point(display_Size, y) , cv::Scalar(0, 0, 0), 1, cv::LINE_AA);
-				y += sqrtf(x) / 2;
+				y += sqrtf(x) / 2 * (1 + (Game_t % 40) / 1600.f);
 			}
 		}
 
@@ -1156,6 +1231,8 @@ float getBestDegreed(const GameAbstractData& data, int balls, int score)
 	int deg = 0;
 	int best_deg = precision / 2;
 	float best_score = 0;
+
+	Game.Flag_under_clear = true;
 
 	float score_per_balls = score / (float)balls;
 	balls = 32;
@@ -1421,8 +1498,10 @@ void runBoth()
 
 	gamePlayer.Flag_custom_state = true;
 	gamePlayer.Flag_animation = true;
+	gamePlayer.Flag_effect = true;
 	gameAI.Flag_custom_state = true;
 	gameAI.Flag_animation = true;
+	gameAI.Flag_effect = true;
 	
 	gamePlayer.display_DeltaX = displayPlayer.x;
 	gamePlayer.display_DeltaY = displayPlayer.y;
@@ -1461,13 +1540,16 @@ void runBoth()
 
 	float playerStack = 0;
 	float aiStack = 0;
-	const float playerSkillCost[4] = { 200.f, 300.f, 400.f, 700.f };
-	const float aiSkillCost[4] = { 150.f, 225.f, 575.f, 700.f };
+	float playerShowStack = 0;
+	float aiShowStack = 0;
+	const float playerSkillCost[4] = { 300.f, 400.f, 500.f, 700.f };
+	const float aiSkillCost[4] = { 150.f, 360.f, 575.f, 700.f };
 	bool playerSkillEnable[4] = { false ,false, false, false };
 	bool playerSkillUse[4] = { false, false, false, false };
 	bool aiSkillEnable[4] = { false, false, false, false };
 	bool aiSkillUse[4] = { false, false, false, false };
 	int aiWantToSkill = 0;
+	int raise_ball = 0;
 
 	function<void(int, int, int, int)> playerMouse = [&](int ev, int x, int y, int flags) {
 		if (x >= gamePlayer.display_DeltaX && x <= gamePlayer.display_DeltaX + gamePlayer.display_Size &&
@@ -1586,10 +1668,15 @@ void runBoth()
 						gamePlayer.Game_Animation_Progress = 1.f;
 					}
 					remain += 0.04f;
-					float mean_higest_color = (highest_color.x + highest_color.y + highest_color.z) / 3;
-					float mean_lowest_color = (lowest_color.x + lowest_color.y + lowest_color.z) / 3;
-					float mean_green_ball_color = (green_ball_color.x + green_ball_color.y + green_ball_color.z) / 3;
-					float mean_blue_ball_color = (blue_ball_color.x + blue_ball_color.y + blue_ball_color.z) / 3;
+					float mean_higest_color = (highest_color.x + highest_color.y + highest_color.z) / 3.f;
+					float mean_lowest_color = (lowest_color.x + lowest_color.y + lowest_color.z) / 3.f;
+					float mean_green_ball_color = (green_ball_color.x + green_ball_color.y + green_ball_color.z) / 3.f;
+					float mean_blue_ball_color = (blue_ball_color.x + blue_ball_color.y + blue_ball_color.z) / 3.f;
+					mean_higest_color = (gamePlayer.fore_color.x + mean_higest_color) / 2.f;
+					mean_lowest_color = (gamePlayer.fore_color.x + mean_lowest_color) / 2.f;
+					mean_green_ball_color = (gamePlayer.fore_color.x + mean_green_ball_color) / 2.f;
+					mean_blue_ball_color = (gamePlayer.fore_color.x + mean_blue_ball_color) / 2.f;
+
 					gamePlayer.lowest_color = blend({ mean_lowest_color , mean_lowest_color , mean_lowest_color }, lowest_color, remain);
 					gamePlayer.highest_color = blend({ mean_higest_color , mean_higest_color , mean_higest_color }, highest_color, remain);
 					gamePlayer.green_ball_color = blend({ mean_green_ball_color , mean_green_ball_color , mean_green_ball_color }, green_ball_color, remain);
@@ -1619,7 +1706,7 @@ void runBoth()
 
 			if (playerSkillEnable[0] && playerSkillUse[0])
 			{
-				gamePlayer.Game_Balls /= 3;
+				gamePlayer.Game_Balls -= raise_ball;
 				playerSkillEnable[0] = false;
 				playerSkillUse[0] = false;
 			}
@@ -1720,7 +1807,7 @@ void runBoth()
 						{
 							if (gameAI.Game_Map[x][y].type == BlockType::None && (x + y) % 2 == 0)
 							{
-								gameAI.Game_Map[x][y] = Block(BlockType::Block, 1 + num * (gameAI.Game_Balls) / 2);
+								gameAI.Game_Map[x][y] = Block(BlockType::Block, 1 + num * (gameAI.Game_Balls) / 4);
 							}
 						}
 						++num;
@@ -1829,6 +1916,10 @@ void runBoth()
 					float mean_lowest_color = (lowest_color.x + lowest_color.y + lowest_color.z) / 3;
 					float mean_green_ball_color = (green_ball_color.x + green_ball_color.y + green_ball_color.z) / 3;
 					float mean_blue_ball_color = (blue_ball_color.x + blue_ball_color.y + blue_ball_color.z) / 3;
+					mean_higest_color = (gameAI.fore_color.x + mean_higest_color) / 2.f;
+					mean_lowest_color = (gameAI.fore_color.x + mean_lowest_color) / 2.f;
+					mean_green_ball_color = (gameAI.fore_color.x + mean_green_ball_color) / 2.f;
+					mean_blue_ball_color = (gameAI.fore_color.x + mean_blue_ball_color) / 2.f;
 					gameAI.lowest_color = blend({ mean_lowest_color , mean_lowest_color , mean_lowest_color }, lowest_color, remain);
 					gameAI.highest_color = blend({ mean_higest_color , mean_higest_color , mean_higest_color }, highest_color, remain);
 					gameAI.green_ball_color = blend({ mean_green_ball_color , mean_green_ball_color , mean_green_ball_color }, green_ball_color, remain);
@@ -1890,12 +1981,30 @@ void runBoth()
 				}
 				gameAI.logs.clear();
 				
-				if (playerSkillEnable[0] || playerSkillEnable[1] || playerSkillEnable[2] || playerSkillEnable[3])
-					aiWantToSkill = 2;
-
-				if (aiWantToSkill == 2)
+				bool able = false;
+				for (int x = 0; x < 4; ++x)
 				{
-					if (!(playerSkillEnable[0] || playerSkillEnable[1] || playerSkillEnable[2] || playerSkillEnable[3]))
+					if (playerSkillEnable[x] && !playerSkillUse[x])
+					{
+						able = true;
+						break;
+					}
+				}
+
+				if (able)
+					aiWantToSkill = 2;
+				else if (aiWantToSkill == 2)
+				{
+					able = false;
+					for (int x = 0; x < 4; ++x)
+					{
+						if (playerSkillEnable[x] && !playerSkillUse[x])
+						{
+							able = true;
+							break;
+						}
+					}
+					if (!able)
 					{
 						do {
 							aiWantToSkill = random() % 4;
@@ -1931,7 +2040,9 @@ void runBoth()
 			}
 			gameBackground.loop();
 		}
-		if (gamePlayer.Game_t % 40 == 0)
+
+		int time = gamePlayer.Game_Score + 25;
+		if (gamePlayer.Game_t % time == 0)
 		{
 			gamePlayer.draw(windPlayer);
 			if (lancher_state == GameState::Login)
@@ -2012,8 +2123,20 @@ void runBoth()
 				if (playerStack > 785) playerStack = 785;
 				if (aiStack > 785) aiStack = 785;
 
+				playerShowStack += (playerStack - playerShowStack) * 0.0004f * time;
+				aiShowStack += (aiStack - aiShowStack) * 0.0004f * time;
+
 				cv::rectangle(wind, cv::Rect(87, 920, 787, 40), cv::Scalar(80, 80, 80), cv::FILLED, cv::LINE_AA);
-				cv::rectangle(wind, cv::Rect(88, 921, playerStack, 38), cv::Scalar(80, 200, 80), cv::FILLED, cv::LINE_AA);
+				if (playerShowStack > playerStack)
+				{
+					cv::rectangle(wind, cv::Rect(88, 921, playerShowStack, 38), cv::Scalar(160, 200, 160), cv::FILLED, cv::LINE_AA);
+					cv::rectangle(wind, cv::Rect(88, 921, playerStack, 38), cv::Scalar(80, 200, 80), cv::FILLED, cv::LINE_AA);
+				}
+				else
+				{
+					cv::rectangle(wind, cv::Rect(88, 921, playerStack, 38), cv::Scalar(160, 200, 160), cv::FILLED, cv::LINE_AA);
+					cv::rectangle(wind, cv::Rect(88, 921, playerShowStack, 38), cv::Scalar(80, 200, 80), cv::FILLED, cv::LINE_AA);
+				}
 				for (int x = 0; x < 4; ++x)
 				{
 					cv::line(wind, cv::Point(87 + playerSkillCost[x], 920), cv::Point(87 + playerSkillCost[x], 960), cv::Scalar(200, 200, 200), 2, cv::LINE_AA);
@@ -2021,11 +2144,49 @@ void runBoth()
 					cv::putText(wind, qwer[x], cv::Point(90 + playerSkillCost[x], 939 + size.height / 2),
 						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, cv::Scalar(200, 200, 200), 2.f, cv::LINE_AA);
 
-					cv::rectangle(wind, cv::Rect(89.6f + (89.6f + 128.f) * x, 770, 128, 128), playerSkillEnable[x] ? cv::Scalar(0, 238, 244) : (aiSkillUse[2] ? cv::Scalar(0, 0, 255) :(playerStack >= playerSkillCost[x] ? cv::Scalar(100, 200, 100) : cv::Scalar(128, 128, 128))), 5, cv::LINE_AA);
+					DirectX::XMFLOAT3 color;
+					bool animate = true;
+					if (playerSkillEnable[x])
+						color = { 244.f, 238.f, 0.f };
+					else
+					{
+						if (aiSkillUse[2])
+							color = { 255.f, 0.f, 0.f };
+						else
+						{
+							if (playerStack >= playerSkillCost[x])
+								color = { 100.f, 200.f, 100.f };
+							else
+							{
+								color = { 128.f, 128.f, 128.f };
+								animate = false;
+							}
+						}
+					}
+
+					if (animate)
+					{
+						float value = ((gamePlayer.Game_t / time) % 31) / 30.f;
+						value = powf(0.5f - value, 2) * 1 + 0.75f;
+						color.x *= value;
+						color.y *= value;
+						color.z *= value;
+					}
+
+					cv::rectangle(wind, cv::Rect(89.6f + (89.6f + 128.f) * x, 770, 128, 128), cv::Scalar(color.z, color.y, color.x), 5, cv::LINE_AA);
 				}
 
 				cv::rectangle(wind, cv::Rect(1047, 920, 787, 40), cv::Scalar(80, 80, 80), cv::FILLED, cv::LINE_AA);
-				cv::rectangle(wind, cv::Rect(1047, 921, aiStack, 38), cv::Scalar(80, 200, 80), cv::FILLED, cv::LINE_AA);
+				if (aiShowStack > aiStack)
+				{
+					cv::rectangle(wind, cv::Rect(1048, 921, aiShowStack, 38), cv::Scalar(160, 200, 160), cv::FILLED, cv::LINE_AA);
+					cv::rectangle(wind, cv::Rect(1048, 921, aiStack, 38), cv::Scalar(80, 200, 80), cv::FILLED, cv::LINE_AA);
+				}
+				else
+				{
+					cv::rectangle(wind, cv::Rect(1048, 921, aiStack, 38), cv::Scalar(160, 200, 160), cv::FILLED, cv::LINE_AA);
+					cv::rectangle(wind, cv::Rect(1048, 921, aiShowStack, 38), cv::Scalar(80, 200, 80), cv::FILLED, cv::LINE_AA);
+				}
 				for (int x = 0; x < 4; ++x)
 				{
 					cv::line(wind, cv::Point(1047 + aiSkillCost[x], 920), cv::Point(1047 + aiSkillCost[x], 960), cv::Scalar(200, 200, 200), 2, cv::LINE_AA);
@@ -2033,7 +2194,33 @@ void runBoth()
 					cv::putText(wind, qwer[x], cv::Point(1050 + aiSkillCost[x], 939 + size.height / 2),
 						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, cv::Scalar(200, 200, 200), 2.f, cv::LINE_AA);
 
-					cv::rectangle(wind, cv::Rect(960 + 89.6f + (89.6f + 128.f) * x, 770, 128, 128), aiSkillEnable[x] ? cv::Scalar(0, 238, 244) : (aiStack >= aiSkillCost[x] ? cv::Scalar(100, 200, 100) : cv::Scalar(128, 128, 128)), 5, cv::LINE_AA);
+					DirectX::XMFLOAT3 color;
+					bool animate = true;
+					if (aiSkillEnable[x])
+						color = { 244.f, 238.f, 0.f };
+					else
+					{
+						{
+							if (aiStack >= aiSkillCost[x])
+								color = { 100.f, 200.f, 100.f };
+							else
+							{
+								color = { 128.f, 128.f, 128.f };
+								animate = false;
+							}
+						}
+					}
+
+					if (animate)
+					{
+						float value = ((gamePlayer.Game_t / time) % 31) / 30.f;
+						value = powf(0.5f - value, 2) * 1 + 0.75f;
+						color.x *= value;
+						color.y *= value;
+						color.z *= value;
+					}
+
+					cv::rectangle(wind, cv::Rect(960 + 89.6f + (89.6f + 128.f) * x, 770, 128, 128), cv::Scalar(color.z, color.y, color.x), 5, cv::LINE_AA);
 				}
 
 			}
@@ -2078,6 +2265,14 @@ void runBoth()
 					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2, displayPlayer.y + displayPlayer.height / 2 + size.height * 5 / 4),
 						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 2.f, cv::Scalar(255, 255, 255), 4.f, cv::LINE_AA);
 				}
+				{
+					const cv::String str = "PRESS ENTER TO RESTART";
+					const cv::Size& size = cv::getTextSize(str, cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, 2.f, nullptr);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2 + 3, displayPlayer.y + displayPlayer.height *  5 / 8 + size.height / 2 + 3),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, cv::Scalar(40, 40, 40), 2.f);
+					cv::putText(wind, str, cv::Point(displayPlayer.x + displayPlayer.width / 2 - size.width / 2, displayPlayer.y + displayPlayer.height * 5 / 8 + size.height / 2),
+						cv::HersheyFonts::FONT_HERSHEY_DUPLEX, 1.f, cv::Scalar(255, 255, 255), 2.f);
+				}
 			}
 
 
@@ -2090,50 +2285,18 @@ void runBoth()
 				{
 					switch (input)
 					{
-					case 27:
-						gamePlayer.Flag_run = false;
-						break;
-					case '0'://0
-						if (!trd_run)
-						{
-							for (int x = 0; x < 4; ++x)
-							{
-								playerSkillEnable[x] = false;
-								playerSkillUse[x] = false;
-								playerStack = 0;
-
-								aiSkillEnable[x] = false;
-								aiSkillUse[x] = false;
-								aiStack = 0;
-							}
-
-							gamePlayer.Flag_roofOff = false;
-							gamePlayer.Penalty_disable_BlockNumber = false;
-							gamePlayer.Penalty_disable_GuideLine = false;
-
-							gamePlayer.initialize();
-							gamePlayer.Game_shootBalls.clear();
-
-							gameAI.initialize();
-							gameAI.Game_shootBalls.clear();
-
-							gamePlayer.highest_color = highest_color;
-							gamePlayer.lowest_color = lowest_color;
-							gamePlayer.green_ball_color = green_ball_color;
-							gamePlayer.blue_ball_color = blue_ball_color;
-						}
-						break;
 					case 'q':
-						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result && gamePlayer.Game_State != State::Shooting) && !(playerSkillEnable[0]) && playerSkillCost[0] <= playerStack && !aiSkillUse[2])
+						if ((gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result && gamePlayer.Game_State != State::Shooting) && !(playerSkillEnable[0]) && playerSkillCost[0] <= playerStack && !aiSkillUse[2])
 						{
 							playerSkillEnable[0] = true;
 							playerSkillUse[0] = true;
-							gamePlayer.Game_Balls *= 3;
+							raise_ball = gamePlayer.Game_Balls * 2;
+							gamePlayer.Game_Balls += raise_ball;
 							playerStack -= playerSkillCost[0];
 						}
 						break;
 					case 'w':
-						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[1]) && playerSkillCost[1] <= playerStack && !aiSkillUse[2])
+						if ((gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[1]) && playerSkillCost[1] <= playerStack && !aiSkillUse[2])
 						{
 							playerSkillEnable[1] = true;
 							playerSkillUse[1] = false;
@@ -2141,7 +2304,7 @@ void runBoth()
 						}
 						break;
 					case 'e':
-						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[2]) && playerSkillCost[2] <= playerStack && !aiSkillUse[2])
+						if ((gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[2]) && playerSkillCost[2] <= playerStack && !aiSkillUse[2])
 						{
 							playerSkillEnable[2] = true;
 							playerSkillUse[2] = false;
@@ -2149,11 +2312,19 @@ void runBoth()
 						}
 						break;
 					case 'r':
-						if (!trd_run && (gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[3]) && playerSkillCost[3] <= playerStack && !aiSkillUse[2])
+						if ((gamePlayer.Game_State != State::Prepare && gamePlayer.Game_State != State::Result) && !(playerSkillEnable[3]) && playerSkillCost[3] <= playerStack && !aiSkillUse[2])
 						{
 							playerSkillEnable[3] = true;
 							playerSkillUse[3] = false;
 							playerStack -= playerSkillCost[3];
+						}
+						break;
+					case 27:
+						if (gamePlayer.Game_State == State::Shoot)
+						{
+							gamePlayer.Game_State = State::Animation;
+							gamePlayer.Game_Animation = AnimationState::Dying;
+							gamePlayer.Game_Animation_Progress = 0.f;
 						}
 						break;
 					}
@@ -2173,7 +2344,7 @@ void runBoth()
 				{
 					--initial_cursor;
 				}
-				if (input == 27)
+				if (input == '0')
 				{
 					gamePlayer.Flag_run = false;
 				}
@@ -2188,6 +2359,73 @@ void runBoth()
 				if (input == 13)
 				{
 					lancher_state = GameState::Login;
+					gamePlayer.initialize();
+					gameAI.initialize();
+
+					gamePlayer.fore_color = { 240.f, 240.f, 240.f };
+					gameAI.fore_color = { 240.f, 240.f, 240.f };
+
+					gamePlayer.lowest_color = lowest_color;
+					gamePlayer.highest_color = highest_color;
+					gamePlayer.green_ball_color = green_ball_color;
+					gamePlayer.blue_ball_color = blue_ball_color;
+
+					gameAI.lowest_color = lowest_color;
+					gameAI.highest_color = highest_color;
+					gameAI.green_ball_color = green_ball_color;
+					gameAI.blue_ball_color = blue_ball_color;
+
+
+					if (playerSkillEnable[0] && playerSkillUse[0])
+					{
+						gamePlayer.Game_Balls /= 3;
+						playerSkillEnable[0] = false;
+						playerSkillUse[0] = false;
+					}
+					if (playerSkillEnable[1] && playerSkillUse[1])
+					{
+						playerSkillEnable[1] = false;
+						playerSkillUse[1] = false;
+					}
+					if (playerSkillEnable[2] && playerSkillUse[2])
+					{
+						playerSkillEnable[2] = false;
+						playerSkillUse[2] = false;
+					}
+					if (playerSkillEnable[3] && playerSkillUse[3])
+					{
+						playerSkillEnable[3] = false;
+						playerSkillUse[3] = false;
+					}
+
+					if (aiSkillEnable[0] && aiSkillUse[0])
+					{
+						gamePlayer.Penalty_disable_BlockNumber = false;
+						aiSkillEnable[0] = false;
+						aiSkillUse[0] = false;
+					}
+					if (aiSkillEnable[1] && aiSkillUse[1])
+					{
+						gamePlayer.Penalty_disable_GuideLine = false;
+						aiSkillEnable[1] = false;
+						aiSkillUse[1] = false;
+					}
+					if (aiSkillEnable[2] && aiSkillUse[2])
+					{
+						aiSkillEnable[2] = false;
+						aiSkillUse[2] = false;
+					}
+					if (aiSkillEnable[3] && aiSkillUse[3])
+					{
+						gamePlayer.Flag_roofOff = false;
+						aiSkillEnable[3] = false;
+						aiSkillUse[3] = false;
+					}
+
+					aiStack = 0;
+					playerStack = 0;
+					aiShowStack = 0;
+					playerShowStack = 0;
 				}
 			}
 		}
