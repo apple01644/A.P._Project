@@ -177,7 +177,7 @@ array<float, Game_Width> create_BoardHeader(const int Game_Score)
 	{
 		if (ret[x] == 0.f)
 		{
-			if (random() % 100 < 50 + Game_Score * 2)
+			if (random() % 100 < 50 + Game_Score)
 			{
 				ret[x] = 1.f;
 				if (--left_ball == 0) break;
@@ -484,11 +484,11 @@ public:
 										float rad = atan2f(ball.vx, ball.vy);
 										float length = sqrtf(powf(ball.vy, 2) + powf(ball.vx, 2));
 										float new_rad = -(rad - rad_C2P) + rad_C2P;
-
+										*/
 										while (new_rad < DirectX::XM_PI)
 											new_rad += DirectX::XM_2PI;
 										new_rad -= DirectX::XM_2PI;
-
+										
 										if (new_rad >= 0.f && new_rad < 0.15f)
 										{
 											new_rad = 0.15f;
@@ -504,7 +504,7 @@ public:
 										if (new_rad >= -DirectX::XM_PI && new_rad < 0.15 - DirectX::XM_PI)
 										{
 											new_rad = 0.15f - DirectX::XM_PI;
-										}*/
+										}
 
 										
 
@@ -748,7 +748,7 @@ public:
 			}
 			Game_shootBalls.clear();
 		}
-		if (max_y == 0.f) {
+		if (max_y == 0.f && Game_groundBall) {
 			for (const Ball& ball : Game_shootBalls)
 			{
 				if (Flag_effect)
@@ -1069,12 +1069,11 @@ public:
 			}
 			else
 			{
-				score += 1.f * (1 + log.y / 5.f);
+				score += 1.f * (1 + log.y / 7.f);
 			}
 		}
 
 		score /= balls;
-		score += getting_ball * 5;
 
 		bool died = false;
 
@@ -1087,11 +1086,11 @@ public:
 				died = true;
 				break;
 			case BlockType::Ball:
-				died = true;
-				score += 5.f;
+				++getting_ball;
 				break;
 			}
 		}
+		score += getting_ball * 5;
 
 		return make_tuple(score, died);
 	}
@@ -1259,9 +1258,9 @@ float getBestDegreed(const GameAbstractData& data, int balls, int score)
 
 	Game.Flag_under_clear = true;
 
-	float score_per_balls = score / (float)balls;
-	balls = 32;
-	score =  round(score_per_balls * balls);
+	//float score_per_balls = score / (float)balls;
+	//balls = 32;
+	//score =  round(score_per_balls * balls);
 
 	Game.custom_initialize(data, balls, score);
 	while (Game.Flag_run)
@@ -1274,6 +1273,14 @@ float getBestDegreed(const GameAbstractData& data, int balls, int score)
 		case State::Result:
 			{
 				auto [score, died] = Game.assess_func(balls);
+				for (int x = 0; x < Game_Width; ++x)
+				{
+					if (Game.Game_Map[x][Game_Height - 1].type == BlockType::Block ||
+						Game.Game_Map[x][Game_Height - 2].type == BlockType::Block)
+					{
+						died = 1;
+					}
+				}
 				if (died == 0)
 				{
 					//cout << deg << " " << score << endl;
