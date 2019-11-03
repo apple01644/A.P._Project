@@ -1248,10 +1248,10 @@ tuple<GameAbstractData, int, int> fabric_data()
 	return make_tuple(data, now_ball, now_score);
 }
 
-float getBestDegreed(const GameAbstractData& data, int balls, int score)
+float getBestDegreed(const GameAbstractData& data, int balls, int score, bool save_data = false)
 {
 	SBBGame Game;
-	const static int precision = 128;
+	constexpr static int precision = 128;
 	int deg = 0;
 	int best_deg = precision / 2;
 	float best_score = 0;
@@ -1271,26 +1271,20 @@ float getBestDegreed(const GameAbstractData& data, int balls, int score)
 			Game.action_shoot(deg / (float)precision);
 			break;
 		case State::Result:
+		{
+			auto [score, died] = Game.assess_func(balls);
+
+			if (save_data) savedata(data, balls, deg, score, died);
+			if (died == 0)
 			{
-				auto [score, died] = Game.assess_func(balls);
-				for (int x = 0; x < Game_Width; ++x)
+				//cout << deg << " " << score << endl;
+				if (best_score < score)
 				{
-					if (Game.Game_Map[x][Game_Height - 1].type == BlockType::Block ||
-						Game.Game_Map[x][Game_Height - 2].type == BlockType::Block)
-					{
-						died = 1;
-					}
-				}
-				if (died == 0)
-				{
-					//cout << deg << " " << score << endl;
-					if (best_score < score)
-					{
-						best_score = score;
-						best_deg = deg;
-					}
+					best_score = score;
+					best_deg = deg;
 				}
 			}
+
 			if (deg == precision)
 			{
 				//cout << best_score << endl;
@@ -1302,6 +1296,7 @@ float getBestDegreed(const GameAbstractData& data, int balls, int score)
 				Game.custom_initialize(data, balls, score);
 				Game.log_begin();
 			}
+		}
 			break;
 		}
 		Game.loop();
@@ -1356,33 +1351,35 @@ void getBestDegreedThread(const GameAbstractData& data, int balls, int score, st
 void runAIOnly()
 {
 	//Height, Width
-	cv::Mat wind(1080, 1920, CV_8UC3);
+	//cv::Mat wind(1080, 1920, CV_8UC3);
 
-	cv::namedWindow("mainWindow");
-	cv::imshow("mainWindow", wind);
-	cv::moveWindow("mainWindow", 0, 0);
+	//cv::namedWindow("mainWindow");
+	//cv::imshow("mainWindow", wind);
+	//cv::moveWindow("mainWindow", 0, 0);
 
-	SBBGame gameAI;
+	SetPriorityClass(GetCurrentProcess(), 0x100);
+	SBBGame gameAI; 
 
 	while (gameAI.Flag_run)
 	{
 		switch (gameAI.Game_State)
 		{
 		case State::Shoot:
-			gameAI.action_shoot(getBestDegreed(gameAI.exportData(), gameAI.Game_Balls, gameAI.Game_Score));
+			gameAI.action_shoot(getBestDegreed(gameAI.exportData(), gameAI.Game_Balls, gameAI.Game_Score, true));
 			break;
 		case State::Result:
 			gameAI.Game_State = State::Prepare;
 			gameAI.Game_X = gameAI.Game_NX;
+			cout << "End a turn." << endl;
 			break;
 		}
 		gameAI.loop();
-		if (gameAI.Game_t % 40 == 0)
+		/*if (gameAI.Game_t % 40 == 0)
 		{
 			gameAI.draw(wind);
 			cv::imshow("mainWindow", wind);
 			cv::waitKey(1);
-		}
+		}*/
 
 	}
 }
@@ -2469,7 +2466,8 @@ void runBoth()
 int main()
 {
 	//SetPriorityClass(GetCurrentProcess(), 0x100);
-	runBoth();
+	//runBoth();
+	runAIOnly();
 
 	return 0;
 }
