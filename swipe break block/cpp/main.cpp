@@ -1392,7 +1392,7 @@ void mouseCallback(int ev, int x, int y, int flags, void* data)
 void runPlayerOnly()
 {
 	//Height, Width
-	cv::Mat wind(1080, 1920, CV_8UC3);
+	cv::Mat wind(640, 640, CV_8UC3);
 
 	cv::namedWindow("mainWindow");
 	cv::setWindowProperty("mainWindow", cv::WINDOW_FULLSCREEN, cv::WINDOW_FULLSCREEN);
@@ -1401,24 +1401,55 @@ void runPlayerOnly()
 	cv::moveWindow("mainWindow", 0, 0);
 
 	SBBGame gamePlayer;
+	gamePlayer.Flag_animation = true;
+	gamePlayer.Flag_effect = true;
+	const DirectX::XMFLOAT3 highest_color = { 230.f,   5.f,   0.f };
+	const DirectX::XMFLOAT3 lowest_color = { 253.f, 204.f,  77.f };
+	const DirectX::XMFLOAT3 green_ball_color = { 0.f, 255.f,  0.f };
+	const DirectX::XMFLOAT3 blue_ball_color = { 94.f, 167.f,  243.f };
 
+	cv::Rect displayPlayer = cv::Rect(0, 0, 640, 640);
+	gamePlayer.display_DeltaX = displayPlayer.x;
+	gamePlayer.display_DeltaY = displayPlayer.y;
+	gamePlayer.display_Size = displayPlayer.width;
+	cv::Mat windPlayer(wind, displayPlayer);
 
 	function<void(int, int, int, int)> playerMouse = [&](int ev, int x, int y, int flags) {
 		switch (ev)
 		{
-		case cv::EVENT_LBUTTONDOWN:
-			if (gamePlayer.Game_State == State::Shoot)
-			{
+		case cv::EVENT_MOUSEMOVE:
+			if (gamePlayer.Game_State == State::Shoot) {
+
 				float rad = atan2f(
-					gamePlayer.Game_X - (float)x / gamePlayer.display_Size * 100,
+					gamePlayer.Game_X - ((float)x - gamePlayer.display_DeltaX) / gamePlayer.display_Size * 100,
 					gamePlayer.Game_Y - ((float)y - gamePlayer.display_DeltaY) / gamePlayer.display_Size * 100
 				);
-				
+
 				rad = -DirectX::XM_PIDIV2 - rad;
 				float deg = (rad - 0.15f + DirectX::XM_PI) / (DirectX::XM_PI - 0.3f);
 				if (deg >= 0 && deg <= 1)
 				{
+					gamePlayer.guide_enable = true;
+					gamePlayer.guide_line = deg;
+				}
+			}
+			break;
+		case cv::EVENT_LBUTTONDOWN:
+			if (gamePlayer.Game_State == State::Shoot)
+			{
+				float rad = atan2f(
+					gamePlayer.Game_X - ((float)x - gamePlayer.display_DeltaX) / gamePlayer.display_Size * 100,
+					gamePlayer.Game_Y - ((float)y - gamePlayer.display_DeltaY) / gamePlayer.display_Size * 100
+				);
+
+				rad = -DirectX::XM_PIDIV2 - rad;
+				float deg = (rad - 0.15f + DirectX::XM_PI) / (DirectX::XM_PI - 0.3f);
+				//if (deg >= 0 && deg <= 1)
+				if (deg < 0) deg = 0;
+				if (deg > 1) deg = 1;
+				{
 					gamePlayer.action_shoot(deg);
+					gamePlayer.guide_enable = false;
 				}
 			}
 			break;
@@ -1430,19 +1461,120 @@ void runPlayerOnly()
 
 	while (gamePlayer.Flag_run)
 	{
+		int time = gamePlayer.Game_Score + 5;
 		switch (gamePlayer.Game_State)
 		{
+
+		case State::Animation:
+			if (gamePlayer.Game_t % time == 0)
+			{
+				switch (gamePlayer.Game_Animation)
+				{
+				case AnimationState::GettingDowns:
+				{
+					static int remain;
+					if (gamePlayer.Game_Animation_Progress == 0.f)
+					{
+						remain = (int)gamePlayer.display_Size / 9;
+						gamePlayer.Game_Animation_Progress = 1.f;
+					}
+					gamePlayer.Game_Animation_Dy += remain / 2;
+					remain /= 2;
+					if (remain == 0)
+					{
+						gamePlayer.Game_Animation = AnimationState::None;
+						gamePlayer.Game_State = State::Shoot;
+						gamePlayer.Game_Animation_Dy = 0;
+
+						for (int x = 0; x < Game_Width; ++x)
+						{
+							Block& block = gamePlayer.Game_Map[x][Game_Height - 1];
+							switch (block.type)
+							{
+							case BlockType::Ball:
+								++gamePlayer.Game_Balls;
+								block = Block(BlockType::None, 0);
+								if (gamePlayer.Flag_effect)
+								{
+									for (int _ = 0; _ < 15; ++_)
+									{
+										float rad = (_ / 7.5f) * DirectX::XM_2PI;
+										DirectX::XMFLOAT3 color = { 0, 255, 0 };
+										gamePlayer.Game_effects.push_back(
+											Effect{
+												100 / 6.f * (x + 0.5f),
+												100 / 9.f * (Game_Height - 1 + 0.5f),
+												2.f,
+												rad,
+												color
+											});
+									}
+								}
+								break;
+							}
+						}
+					}
+
+				}
+				break;
+				case AnimationState::Dying:
+				{
+					static float remain;
+					if (gamePlayer.Game_Animation_Progress == 0.f)
+					{
+						remain = 0.f;
+						gamePlayer.Game_Animation_Progress = 1.f;
+					}
+					remain += 0.04f;
+					float mean_higest_color = (highest_color.x + highest_color.y + highest_color.z) / 3.f;
+					float mean_lowest_color = (lowest_color.x + lowest_color.y + lowest_color.z) / 3.f;
+					float mean_green_ball_color = (green_ball_color.x + green_ball_color.y + green_ball_color.z) / 3.f;
+					float mean_blue_ball_color = (blue_ball_color.x + blue_ball_color.y + blue_ball_color.z) / 3.f;
+					mean_higest_color = (gamePlayer.fore_color.x + mean_higest_color) / 2.f;
+					mean_lowest_color = (gamePlayer.fore_color.x + mean_lowest_color) / 2.f;
+					mean_green_ball_color = (gamePlayer.fore_color.x + mean_green_ball_color) / 2.f;
+					mean_blue_ball_color = (gamePlayer.fore_color.x + mean_blue_ball_color) / 2.f;
+
+					gamePlayer.lowest_color = blend({ mean_lowest_color , mean_lowest_color , mean_lowest_color }, lowest_color, remain);
+					gamePlayer.highest_color = blend({ mean_higest_color , mean_higest_color , mean_higest_color }, highest_color, remain);
+					gamePlayer.green_ball_color = blend({ mean_green_ball_color , mean_green_ball_color , mean_green_ball_color }, green_ball_color, remain);
+					gamePlayer.blue_ball_color = blend({ mean_blue_ball_color , mean_blue_ball_color , mean_blue_ball_color }, blue_ball_color, remain);
+					if (remain >= 1)
+					{
+						gamePlayer.Game_Animation = AnimationState::None;
+						gamePlayer.Game_State = State::Die;
+					}
+				}
+				break;
+				}
+			}
+			break;
 		case State::Result:
 			gamePlayer.Game_State = State::Prepare;
 			gamePlayer.Game_X = gamePlayer.Game_NX;
 			break;
 		}
 		gamePlayer.loop();
-		if (gamePlayer.Game_t % 40 == 0)
+		if (gamePlayer.Game_t % time == 0)
 		{
-			gamePlayer.draw(wind);
+			gamePlayer.draw(windPlayer);
 			cv::imshow("mainWindow", wind);
-			cv::waitKey(1);
+			int input = cv::waitKey(1);
+			if (gamePlayer.Game_State == State::Die)
+			{
+				if (input == 'r')
+				{
+					gamePlayer.initialize();
+					gamePlayer.blue_ball_color = blue_ball_color;
+					gamePlayer.green_ball_color = green_ball_color;
+					gamePlayer.highest_color = highest_color;
+					gamePlayer.lowest_color = lowest_color;
+				}
+			}
+			if (input == 27)
+			{
+				gamePlayer.Flag_run = false;
+			}
 		}
 
 	}
@@ -2467,7 +2599,8 @@ int main()
 {
 	//SetPriorityClass(GetCurrentProcess(), 0x100);
 	//runBoth();
-	runAIOnly();
+	//runAIOnly();
+	runPlayerOnly();
 
 	return 0;
 }
