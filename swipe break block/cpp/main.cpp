@@ -2597,10 +2597,10 @@ void runBoth()
 
 int main()
 {
-	//SetPriorityClass(GetCurrentProcess(), 0x100);
-	//runBoth();
+	SetPriorityClass(GetCurrentProcess(), 0x100);
+	runBoth();
 	//runAIOnly();
-	runPlayerOnly();
+	//runPlayerOnly();
 
 	return 0;
 }
